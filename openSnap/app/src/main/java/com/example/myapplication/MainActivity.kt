@@ -3,7 +3,6 @@ package com.example.myapplication
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -29,6 +28,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -56,19 +56,34 @@ class MainActivity : ComponentActivity() {
         )
 
         setContent {
-            ComposeTutorialTheme {
+            val isDarkTheme = remember { mutableStateOf(true) }
+
+            ComposeTutorialTheme(darkTheme = isDarkTheme.value) {
                 Surface(modifier = Modifier.fillMaxSize().padding(top = 24.dp)) {
                     Column {
                         // At least 2 different styles of text (0.5p)
-                        Text(
-                            text = "Messages",
-                            style =  MaterialTheme.typography.headlineLarge.copy(
-                                color = MaterialTheme.colorScheme.primary,
-                                fontFamily = androidx.compose.ui.text.font.FontFamily.Serif
-                            ),
-                            modifier = Modifier
-                                .padding(horizontal = 16.dp, vertical = 8.dp)
-                        )
+                        Row {
+                            Text(
+                                text = "Messages",
+                                style =  MaterialTheme.typography.headlineLarge.copy(
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontFamily = androidx.compose.ui.text.font.FontFamily.Serif
+                                ),
+                                modifier = Modifier
+                                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                            )
+                            //At least one clickable element that creates a visible change (2p)
+                            IconButton(
+                                onClick = { isDarkTheme.value = !isDarkTheme.value },
+                                modifier = Modifier.padding(top = 6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Settings,
+                                    contentDescription = "Toggle theme",
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
                         //Scrolling and enough visual elements to need it (1p)
                         MessageList(messages = sampleMessages)
                     }
@@ -111,39 +126,6 @@ fun MessageList(messages: List<Message>, modifier: Modifier = Modifier) {
     LazyColumn(modifier = modifier.padding(all = 2.dp)) {
         items(messages) { message ->
             MessageCard(msg = message, modifier = Modifier.padding(bottom = 8.dp))
-        }
-    }
-}
-
-@Preview(showBackground = true)
-@Composable
-fun PreviewMessageList() {
-    val sampleMessages = listOf(
-        Message("Alice", "Hello! How are you?"),
-        Message("Bob", "I'm fine, thanks! What about you?"),
-        Message("Charlie", "Jetpack Compose is awesome!"),
-        Message("Daisy", "Don't forget to check the documentation.")
-    )
-
-    ComposeTutorialTheme() {
-        Surface {
-            MessageList(messages = sampleMessages)
-        }
-    }
-}
-
-
-@Preview(showBackground = true)
-@Composable
-fun PreviewMessageCard() {
-    ComposeTutorialTheme() {
-        Surface {
-            MessageCard(
-                msg = Message(
-                    author = "John Doe",
-                    body = "This is a sample message to preview the MessageCard."
-                )
-            )
         }
     }
 }
