@@ -6,7 +6,6 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -16,7 +15,6 @@ import androidx.compose.ui.tooling.preview.Preview
 import com.example.myapplication.ui.theme.ComposeTutorialTheme
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
@@ -29,11 +27,17 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.BottomAppBar
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.*
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.rememberNavController
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -55,41 +59,83 @@ class MainActivity : ComponentActivity() {
             Message("Alice", "125"),
         )
 
+
+        // https://github.com/KaushalVasava/JetPackCompose_Basic/blob/navigate-back-with-result/app/src/main/java/com/lahsuak/apps/jetpackcomposebasic/MainActivity.kt
         setContent {
             val isDarkTheme = remember { mutableStateOf(true) }
+            val navController = rememberNavController()
+            val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
+            val hiddenBottomBar: List<String> = listOf("login_screen")
 
             ComposeTutorialTheme(darkTheme = isDarkTheme.value) {
-                Surface(modifier = Modifier.fillMaxSize().padding(top = 24.dp)) {
-                    Column {
-                        // At least 2 different styles of text (0.5p)
-                        Row {
-                            Text(
-                                text = "Messages",
-                                style =  MaterialTheme.typography.headlineLarge.copy(
-                                    color = MaterialTheme.colorScheme.primary,
-                                    fontFamily = androidx.compose.ui.text.font.FontFamily.Serif
-                                ),
-                                modifier = Modifier
-                                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                Scaffold(
+                    bottomBar = {
+                        if (currentRoute !in hiddenBottomBar) {
+                            BottomAppBar(
+                                modifier = Modifier.height(24.dp),
+                                content = {
+                                    Text(
+                                        text = "Bottom Bar",
+                                        modifier = Modifier
+                                            .padding(horizontal = 8.dp),
+                                        color = MaterialTheme.colorScheme.onPrimary
+                                    )
+                                }
                             )
-                            //At least one clickable element that creates a visible change (2p)
-                            IconButton(
-                                onClick = { isDarkTheme.value = !isDarkTheme.value },
-                                modifier = Modifier.padding(top = 6.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Settings,
-                                    contentDescription = "Toggle theme",
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
-                            }
                         }
-                        //Scrolling and enough visual elements to need it (1p)
-                        MessageList(messages = sampleMessages)
+                    }
+                ) { innerPadding ->
+                    NavHost(
+                        navController = navController,
+                        startDestination = "login_screen",
+                        modifier = Modifier.padding(innerPadding)
+                    ) {
+                        composable("login_screen") {
+                            loginScreen()
+                        }
+                        composable("messages_screen") {
+                            messageScreen(isDarkTheme, sampleMessages)
+                        }
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+fun loginScreen() {
+    Text("Hello")
+}
+
+@Composable
+fun messageScreen(isDarkTheme: MutableState<Boolean>, sampleMessages: List<Message>) {
+    Column {
+        // At least 2 different styles of text (0.5p)
+        Row {
+            Text(
+                text = "Messages",
+                style = MaterialTheme.typography.headlineLarge.copy(
+                    color = MaterialTheme.colorScheme.primary,
+                    fontFamily = androidx.compose.ui.text.font.FontFamily.Serif
+                ),
+                modifier = Modifier
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+            )
+            //At least one clickable element that creates a visible change (2p)
+            IconButton(
+                onClick = { isDarkTheme.value = !isDarkTheme.value },
+                modifier = Modifier.padding(top = 6.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Settings,
+                    contentDescription = "Toggle theme",
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+        //Scrolling and enough visual elements to need it (1p)
+        MessageList(messages = sampleMessages)
     }
 }
 
@@ -159,21 +205,5 @@ fun PreviewMessageCard() {
                 )
             )
         }
-    }
-}
-
-@Composable
-fun Greeting(name: String, modifier: Modifier = Modifier) {
-    Text(
-        text = "Hello $name!",
-        modifier = modifier
-    )
-}
-
-@Preview(showBackground = true)
-@Composable
-fun GreetingPreview() {
-    ComposeTutorialTheme() {
-        Greeting("Android")
     }
 }
