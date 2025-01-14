@@ -113,6 +113,9 @@ class MainActivity : ComponentActivity() {
                         composable("login_screen") {
                             loginScreen(navController)
                         }
+                        composable("register_screen") {
+                            registerScreen(navController)
+                        }
                         composable("home_screen") {
                             homeScreen(navController)
                         }
@@ -134,19 +137,26 @@ fun loginScreen(navController: NavController) {
     // but circular navigation should be prevented! (5p)
     // https://foso.github.io/Jetpack-Compose-Playground/activity/backhandler/
     // https://stackoverflow.com/questions/67401294/jetpack-compose-close-application-by-button
-    var backPressedTime by remember { mutableLongStateOf(0) }
-    val activity = (LocalContext.current as? Activity)
+    BackPressHandler()
 
-    BackHandler {
-        val currentTime = System.currentTimeMillis()
-        if (currentTime - backPressedTime < 2000) {
-            Log.d("BackPress2", "Exiting activity, currentTime: $currentTime, backPressedTime: $backPressedTime")
-            activity?.finish()
-        } else {
-            backPressedTime = currentTime
-            Log.d("BackPress1", "Exiting activity, currentTime: $currentTime, backPressedTime: $backPressedTime")
+    Column {
+        Text("Hello login screen")
+        Button(
+            onClick = {
+                navController.navigate("home_screen") {
+                    popUpTo(navController.graph.startDestinationId) { inclusive = true }
+                    launchSingleTop = true
+                }
+            }
+        ) {
+            Text("Login")
         }
     }
+}
+
+@Composable
+fun registerScreen(navController: NavController) {
+    BackPressHandler()
     Column {
         Text("Hello login screen")
         Button(
