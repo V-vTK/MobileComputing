@@ -1,10 +1,9 @@
 package com.example.myapplication
 
-import android.app.Activity
+import android.net.Uri
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Column
@@ -27,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.material3.Surface
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -39,10 +39,11 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.TextField
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.*
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.Alignment
 import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -151,26 +152,62 @@ fun loginScreen(navController: NavController) {
         ) {
             Text("Login")
         }
-    }
-}
-
-@Composable
-fun registerScreen(navController: NavController) {
-    BackPressHandler()
-    Column {
-        Text("Hello login screen")
         Button(
             onClick = {
-                navController.navigate("home_screen") {
+                navController.navigate("register_screen") {
                     popUpTo(navController.graph.startDestinationId) { inclusive = true }
                     launchSingleTop = true
                 }
             }
         ) {
-            Text("Login")
+            Text("Sign up instead!")
         }
     }
 }
+
+@Composable
+fun registerScreen(navController: NavController) {
+    var inputText by remember { mutableStateOf("") }
+    var inputText2 by remember { mutableStateOf("") }
+    val selectedImageUri = remember { mutableStateOf<Uri?>(null) }
+
+    BackPressHandler()
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text("Hello Register Screen", modifier = Modifier.padding(bottom = 16.dp, top= 16.dp))
+        TextField(
+            value = inputText,
+            onValueChange = { inputText = it },
+            label = { Text("Enter your username") },
+            modifier = Modifier.fillMaxWidth(0.6f)
+        )
+        TextField(
+            value = inputText2,
+            onValueChange = { inputText2 = it },
+            label = { Text("Enter your password") },
+            modifier = Modifier.fillMaxWidth(0.6f)
+        )
+        // Input and display at least some text and a picture in one view (5p)
+        // https://stackoverflow.com/questions/78110240/how-to-pass-a-value-from-a-composable-function-to-another-composable-function-an
+        imagePicker(selectedImageUri = selectedImageUri.value,
+            onImageSelected = { uri ->
+                Log.d("ImagePickerExample", "Selected Image URI: $uri , $selectedImageUri")
+                selectedImageUri.value = uri
+                Log.d("ImagePickerExample", "Selected Image URI: $uri , $selectedImageUri")
+            }
+        )
+        Button(onClick = { navController.navigate("home_screen") }) {
+            Text("Submit")
+        }
+    }
+}
+
 
 @Composable
 fun homeScreen(navController: NavController) {
@@ -260,38 +297,6 @@ fun MessageList(messages: List<Message>, modifier: Modifier = Modifier) {
     LazyColumn(modifier = modifier.padding(all = 2.dp)) {
         items(messages) { message ->
             MessageCard(msg = message, modifier = Modifier.padding(bottom = 8.dp))
-        }
-    }
-}
-
-@Preview(showBackground = true)
-@Composable
-fun PreviewMessageList() {
-    val sampleMessages = listOf(
-        Message("Alice", "Hello! How are you?"),
-        Message("Bob", "I'm fine, thanks! What about you?"),
-        Message("Charlie", "Jetpack Compose is awesome!"),
-        Message("Daisy", "Don't forget to check the documentation.")
-    )
-
-    ComposeTutorialTheme() {
-        Surface {
-            MessageList(messages = sampleMessages)
-        }
-    }
-}
-
-@Preview(showBackground = true)
-@Composable
-fun PreviewMessageCard() {
-    ComposeTutorialTheme() {
-        Surface {
-            MessageCard(
-                msg = Message(
-                    author = "John Doe",
-                    body = "This is a sample message to preview the MessageCard."
-                )
-            )
         }
     }
 }
