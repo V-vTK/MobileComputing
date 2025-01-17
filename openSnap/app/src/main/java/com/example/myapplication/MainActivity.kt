@@ -2,6 +2,8 @@ package com.example.myapplication
 
 import android.net.Uri
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -49,6 +51,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import coil.compose.rememberAsyncImagePainter
+import com.example.myapplication.receiver.StopReceiver
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -56,12 +59,15 @@ import java.io.File
 
 class MainActivity : ComponentActivity() {
     private lateinit var dataStoreManager: DataStoreManager
+    private lateinit var notificationHelper: NotificationHelper
+    private val handler = Handler(Looper.getMainLooper())
 
     override fun onCreate(savedInstanceState: Bundle?) {
 
         super.onCreate(savedInstanceState)
 
         dataStoreManager = DataStoreManager(this)
+        notificationHelper = NotificationHelper(this)
 
         val sampleMessages = listOf(
             Message("Alice", "Hello!"),
@@ -78,7 +84,6 @@ class MainActivity : ComponentActivity() {
             Message("Alice", "123"),
             Message("Alice", "125"),
         )
-
 
         // https://github.com/KaushalVasava/JetPackCompose_Basic/blob/navigate-back-with-result/app/src/main/java/com/lahsuak/apps/jetpackcomposebasic/MainActivity.kt
         setContent {
@@ -121,7 +126,7 @@ class MainActivity : ComponentActivity() {
                         modifier = Modifier.padding(innerPadding)
                     ) {
                         composable("login_screen") {
-                            loginScreen(navController)
+                            loginScreen(navController, notificationHelper)
                         }
                         composable("register_screen") {
                             registerScreen(navController, dataStoreManager)
@@ -133,7 +138,7 @@ class MainActivity : ComponentActivity() {
                             messageScreen(navController, isDarkTheme, sampleMessages)
                         }
                         composable("settings_screen") {
-                            settingsScreen(navController)
+                            settingsScreen(navController, handler, notificationHelper)
                         }
                     }
                 }
@@ -143,7 +148,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun loginScreen(navController: NavController) {
+fun loginScreen(navController: NavController, notificationHelper: NotificationHelper) {
     // but circular navigation should be prevented! (5p)
     // https://foso.github.io/Jetpack-Compose-Playground/activity/backhandler/
     // https://stackoverflow.com/questions/67401294/jetpack-compose-close-application-by-button
@@ -153,6 +158,8 @@ fun loginScreen(navController: NavController) {
         Text("Hello login screen")
         Button(
             onClick = {
+                Log.d("HELLO NOTIFI", "SD")
+                notificationHelper.showBasicNotification()
                 navController.navigate("home_screen") {
                     popUpTo(navController.graph.startDestinationId) { inclusive = true }
                     launchSingleTop = true
@@ -244,13 +251,31 @@ fun homeScreen(navController: NavController) {
 }
 
 @Composable
-fun settingsScreen(navController: NavController) {
+fun settingsScreen(
+    navController: NavController,
+    handler: Handler,
+    notificationHelper: NotificationHelper
+) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val dataStoreManager = DataStoreManager(context)
     val username = remember { mutableStateOf("") }
     val password = remember { mutableStateOf("") }
     val profilePicture = remember { mutableStateOf("") }
+    val stopFlag = remember { mutableStateOf(false) }
+    // While the app is not on foreground (1p)
+    var task = object : Runnable {
+        override fun run() {
+            if (stopFlag.value) {
+                Log.d("Stopped", "TASK $stopFlag")
+                return
+            }
+            // Trigger a notification (2p)
+            notificationHelper.showStopNotification()
+            handler.postDelayed(this, 10000)
+        }
+    }
+
 
     // https://stackoverflow.com/questions/70480709/what-is-the-useeffect-correspondent-in-android-compose-component
     LaunchedEffect(Unit) {
@@ -280,6 +305,18 @@ fun settingsScreen(navController: NavController) {
             }
         }) {
             Text("Sign out")
+        }
+
+        Button(onClick = {
+            handler.post(task)
+        }) {
+            Text("Start reminder")
+        }
+
+        Button(onClick = {
+            handler.removeCallbacks(task)
+        }) {
+            Text("Stop reminder")
         }
 
         Text("username: ${username.value}")
