@@ -1,6 +1,7 @@
 package com.example.myapplication
 
 import android.app.Activity
+import android.content.Context
 import android.net.Uri
 import android.util.Log
 import androidx.activity.compose.BackHandler
@@ -24,6 +25,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import coil.compose.rememberAsyncImagePainter
 import coil.request.ImageRequest
+import java.io.File
+import java.io.FileOutputStream
 
 fun handleBackPress(activity: Activity?, backPressedTime: Long, onBackPressedTimeUpdated: (Long) -> Unit) {
     val currentTime = System.currentTimeMillis()
@@ -80,4 +83,13 @@ fun imagePicker(selectedImageUri: Uri?, onImageSelected: (Uri?) -> Unit) {
             )
         }
     }
+}
+
+fun saveImageToLocalStorage(uri: Uri?, context: Context): String? {
+    val inputStream = uri?.let { context.contentResolver.openInputStream(it) }
+    val file = File(context.filesDir, "profile_image.jpg")
+    val outputStream = FileOutputStream(file)
+    inputStream?.copyTo(outputStream)
+
+    return file.absolutePath
 }

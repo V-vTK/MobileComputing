@@ -13,7 +13,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
 import com.example.myapplication.ui.theme.ComposeTutorialTheme
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
@@ -23,7 +22,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
-import androidx.compose.material3.Surface
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxSize
@@ -44,15 +42,26 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import coil.compose.rememberAsyncImagePainter
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import java.io.File
 
 class MainActivity : ComponentActivity() {
+    private lateinit var dataStoreManager: DataStoreManager
+
     override fun onCreate(savedInstanceState: Bundle?) {
+
         super.onCreate(savedInstanceState)
+
+        dataStoreManager = DataStoreManager(this)
 
         val sampleMessages = listOf(
             Message("Alice", "Hello!"),
@@ -76,7 +85,7 @@ class MainActivity : ComponentActivity() {
             val isDarkTheme = remember { mutableStateOf(true) }
             val navController = rememberNavController()
             val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
-            val hiddenBottomBar: List<String> = listOf("login_screen")
+            val hiddenBottomBar: List<String> = listOf("login_screen", "register_screen")
 
             ComposeTutorialTheme(darkTheme = isDarkTheme.value) {
                 Scaffold(
@@ -115,7 +124,7 @@ class MainActivity : ComponentActivity() {
                             loginScreen(navController)
                         }
                         composable("register_screen") {
-                            registerScreen(navController)
+                            registerScreen(navController, dataStoreManager)
                         }
                         composable("home_screen") {
                             homeScreen(navController)
@@ -166,10 +175,13 @@ fun loginScreen(navController: NavController) {
 }
 
 @Composable
-fun registerScreen(navController: NavController) {
-    var inputText by remember { mutableStateOf("") }
-    var inputText2 by remember { mutableStateOf("") }
+fun registerScreen(navController: NavController, dataStoreManager: DataStoreManager) {
+    var username by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
     val selectedImageUri = remember { mutableStateOf<Uri?>(null) }
+    val selectedImageVal = remember { mutableStateOf<String?>(null) }
+    val context = LocalContext.current
+    val dataStoreManager = DataStoreManager(context)
 
     BackPressHandler()
 
@@ -182,14 +194,14 @@ fun registerScreen(navController: NavController) {
     ) {
         Text("Hello Register Screen", modifier = Modifier.padding(bottom = 16.dp, top= 16.dp))
         TextField(
-            value = inputText,
-            onValueChange = { inputText = it },
+            value = username,
+            onValueChange = { username = it },
             label = { Text("Enter your username") },
             modifier = Modifier.fillMaxWidth(0.6f)
         )
         TextField(
-            value = inputText2,
-            onValueChange = { inputText2 = it },
+            value = password,
+            onValueChange = { password = it },
             label = { Text("Enter your password") },
             modifier = Modifier.fillMaxWidth(0.6f)
         )
@@ -198,11 +210,26 @@ fun registerScreen(navController: NavController) {
         imagePicker(selectedImageUri = selectedImageUri.value,
             onImageSelected = { uri ->
                 Log.d("ImagePickerExample", "Selected Image URI: $uri , $selectedImageUri")
-                selectedImageUri.value = uri
-                Log.d("ImagePickerExample", "Selected Image URI: $uri , $selectedImageUri")
+                val imagePath = saveImageToLocalStorage(uri, context)
+                selectedImageUri.value = Uri.parse(imagePath)
+                selectedImageVal.value = imagePath
+                Log.d("ImagePickerExample", "Saved Image Path: $imagePath")
             }
         )
-        Button(onClick = { navController.navigate("home_screen") }) {
+        // Display given text and picture in another view and retain these changes when restarting application (5p)
+        Button(onClick = {
+            val user = userStore(
+                username = username,
+                password = password,
+                profile_picture = selectedImageVal.value ?: ""
+            )
+
+            CoroutineScope(Dispatchers.IO).launch {
+                dataStoreManager.saveToDataStore(user)
+            }
+
+            navController.navigate("home_screen")
+        }) {
             Text("Submit")
         }
     }
@@ -218,17 +245,57 @@ fun homeScreen(navController: NavController) {
 
 @Composable
 fun settingsScreen(navController: NavController) {
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    val dataStoreManager = DataStoreManager(context)
+    val username = remember { mutableStateOf("") }
+    val password = remember { mutableStateOf("") }
+    val profilePicture = remember { mutableStateOf("") }
+
+    // https://stackoverflow.com/questions/70480709/what-is-the-useeffect-correspondent-in-android-compose-component
+    LaunchedEffect(Unit) {
+        dataStoreManager.getFromDataStore().collect { userStore ->
+            username.value = userStore.username
+            password.value = userStore.password
+            profilePicture.value = userStore.profile_picture
+        }
+    }
     Column {
         Text("Hello settings")
         // but circular navigation should be prevented! (5p)
         // https://stackoverflow.com/questions/71789903/does-navoptionsbuilder-launchsingletop-work-with-nested-navigation-graphs-in-jet
         Button(onClick = {
-            navController.navigate("login_screen") {
-                popUpTo(navController.graph.startDestinationId) { inclusive = true }
-                launchSingleTop = true
+            coroutineScope.launch {
+                navController.navigate("login_screen") {
+                    popUpTo(navController.graph.startDestinationId) { inclusive = true }
+                    launchSingleTop = true
+                }
+                dataStoreManager.clearDataStore()
+                dataStoreManager.getFromDataStore().collect { userStore ->
+                    username.value = userStore.username
+                    password.value = userStore.password
+                    profilePicture.value = userStore.profile_picture
+                }
+                Log.d("username AFTER", username.value)
             }
         }) {
             Text("Sign out")
+        }
+
+        Text("username: ${username.value}")
+        Text("password: ${password.value}")
+        Text("Profile_picture: ${profilePicture.value}")
+        if (profilePicture.value.isNotEmpty()) {
+            val file = File(profilePicture.value)
+            if (file.exists()) {
+                Image(
+                    painter = rememberAsyncImagePainter(file),
+                    contentDescription = "Profile Picture",
+                    modifier = Modifier.fillMaxWidth()
+                )
+            } else {
+                Text("Profile picture not found.")
+            }
         }
     }
 }
