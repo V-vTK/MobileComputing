@@ -51,11 +51,19 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import coil.compose.rememberAsyncImagePainter
-import com.example.myapplication.receiver.StopReceiver
+import com.google.accompanist.permissions.ExperimentalPermissionsApi
+import com.google.accompanist.permissions.rememberPermissionState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.io.File
+import android.Manifest
+import android.content.Context
+import android.content.IntentFilter
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import com.google.accompanist.permissions.isGranted
+
 
 class MainActivity : ComponentActivity() {
     private lateinit var dataStoreManager: DataStoreManager
@@ -147,12 +155,43 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+@OptIn(ExperimentalPermissionsApi::class)
 @Composable
 fun loginScreen(navController: NavController, notificationHelper: NotificationHelper) {
     // but circular navigation should be prevented! (5p)
     // https://foso.github.io/Jetpack-Compose-Playground/activity/backhandler/
     // https://stackoverflow.com/questions/67401294/jetpack-compose-close-application-by-button
     BackPressHandler()
+
+    // https://medium.com/@rzmeneghelo/how-to-request-permissions-in-jetpack-compose-a-step-by-step-guide-7ce4b7782bd7
+    val postNotificationPermissionsState = rememberPermissionState(Manifest.permission.POST_NOTIFICATIONS)
+    val cameraPermissionsState = rememberPermissionState(Manifest.permission.CAMERA)
+
+    val requestPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            Log.d("Camera", "Granted")
+        } else {
+            Log.d("Camera", "Failed")
+        }
+    }
+
+    LaunchedEffect(postNotificationPermissionsState) {
+        if (postNotificationPermissionsState.status.isGranted) {
+            Log.d("LaunnchedEffect Perm notifications", "ELse")
+        } else {
+            requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+
+    LaunchedEffect(cameraPermissionsState) {
+        if (cameraPermissionsState.status.isGranted) {
+            Log.d("LaunnchedEffect Perm Camera", "ELse")
+        } else {
+            requestPermissionLauncher.launch(Manifest.permission.CAMERA)
+        }
+    }
 
     Column {
         Text("Hello login screen")
@@ -267,7 +306,7 @@ fun settingsScreen(
     var task = object : Runnable {
         override fun run() {
             if (stopFlag.value) {
-                Log.d("Stopped", "TASK $stopFlag")
+                Log.d("Reminder", "Stopped TASK $stopFlag")
                 return
             }
             // Trigger a notification (2p)
@@ -308,6 +347,10 @@ fun settingsScreen(
         }
 
         Button(onClick = {
+            val stopReceiver = StopNotificationReceiver(stopFlag)
+            val intentFilter = IntentFilter("com.example.ACTION_STOP")
+            context.registerReceiver(stopReceiver, intentFilter, Context.RECEIVER_EXPORTED)
+            stopFlag.value = false
             handler.post(task)
         }) {
             Text("Start reminder")

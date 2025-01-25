@@ -53,9 +53,9 @@ class NotificationHelper(val context: Context) {
     }
 
     fun showStopNotification() {
-        val stopIntent = Intent(context, NotificationHelper::class.java).apply {
-            putExtra("STOP", "true")
-        }
+        // https://developer.android.com/develop/background-work/background-tasks/broadcasts
+        // https://developer.android.com/develop/ui/views/notifications/navigation
+        val stopIntent = Intent("com.example.ACTION_STOP").apply {}
 
         val actionPendingIntent: PendingIntent = PendingIntent.getBroadcast(context, 0, stopIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
