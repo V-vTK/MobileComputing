@@ -2,6 +2,8 @@ package com.example.myapplication
 
 import android.net.Uri
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -49,19 +51,43 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import coil.compose.rememberAsyncImagePainter
+import com.google.accompanist.permissions.ExperimentalPermissionsApi
+import com.google.accompanist.permissions.rememberPermissionState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.io.File
+import android.Manifest
+import android.content.Context
+import android.content.IntentFilter
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import com.google.accompanist.permissions.isGranted
 
-class MainActivity : ComponentActivity() {
+
+class MainActivity : ComponentActivity(), SensorEventListener {
+    // https://medium.com/@kevalkanpariya5051/working-of-handler-messagequeue-and-handlerthread-4f2082675986
+    private lateinit var sensorManager: SensorManager
     private lateinit var dataStoreManager: DataStoreManager
+    private lateinit var notificationHelper: NotificationHelper
+    private var temperatureSensor: Sensor? = null
+    private val handler = Handler(Looper.getMainLooper())
+    private var temp = mutableStateOf(0f)
 
     override fun onCreate(savedInstanceState: Bundle?) {
-
+        // https://developer.android.com/develop/sensors-and-location/sensors/sensors_overview#sensor-availability
+        sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
+        val deviceSensors: List<Sensor> = sensorManager.getSensorList(Sensor.TYPE_ALL)
+        Log.d("Sensors", "device_sensors $deviceSensors")
+        temperatureSensor = sensorManager.getDefaultSensor(Sensor.TYPE_AMBIENT_TEMPERATURE)
         super.onCreate(savedInstanceState)
 
         dataStoreManager = DataStoreManager(this)
+        notificationHelper = NotificationHelper(this)
 
         val sampleMessages = listOf(
             Message("Alice", "Hello!"),
@@ -78,7 +104,6 @@ class MainActivity : ComponentActivity() {
             Message("Alice", "123"),
             Message("Alice", "125"),
         )
-
 
         // https://github.com/KaushalVasava/JetPackCompose_Basic/blob/navigate-back-with-result/app/src/main/java/com/lahsuak/apps/jetpackcomposebasic/MainActivity.kt
         setContent {
@@ -121,7 +146,7 @@ class MainActivity : ComponentActivity() {
                         modifier = Modifier.padding(innerPadding)
                     ) {
                         composable("login_screen") {
-                            loginScreen(navController)
+                            loginScreen(navController, notificationHelper)
                         }
                         composable("register_screen") {
                             registerScreen(navController, dataStoreManager)
@@ -133,26 +158,77 @@ class MainActivity : ComponentActivity() {
                             messageScreen(navController, isDarkTheme, sampleMessages)
                         }
                         composable("settings_screen") {
-                            settingsScreen(navController)
+                            settingsScreen(navController, handler, notificationHelper, temp)
                         }
                     }
                 }
             }
         }
     }
+
+    // Use any type of sensor listed here: Sensors Overview | Android Developers (5p)
+    override fun onSensorChanged(event: SensorEvent?) {
+        if (event == null) {
+            Log.d("TEMP", "Sensor event is null")
+            return
+        }
+
+        if (event?.sensor?.type == Sensor.TYPE_AMBIENT_TEMPERATURE) {
+            temp.value = event.values[0]
+            Log.d("TEMP", event.values[0].toString())
+        }
+    }
+
+    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
+        Log.d("Accurarcy change","sensor: $sensor; accuracy: $accuracy")
+    }
+
+    override fun onResume() {
+        super.onResume()
+        sensorManager.registerListener(this, temperatureSensor, SensorManager.SENSOR_DELAY_UI)
+    }
+
+    override fun onPause() {
+        super.onPause()
+        sensorManager.unregisterListener(this)
+    }
 }
 
+@OptIn(ExperimentalPermissionsApi::class)
 @Composable
-fun loginScreen(navController: NavController) {
+fun loginScreen(navController: NavController, notificationHelper: NotificationHelper) {
     // but circular navigation should be prevented! (5p)
     // https://foso.github.io/Jetpack-Compose-Playground/activity/backhandler/
     // https://stackoverflow.com/questions/67401294/jetpack-compose-close-application-by-button
     BackPressHandler()
 
+    // https://medium.com/@rzmeneghelo/how-to-request-permissions-in-jetpack-compose-a-step-by-step-guide-7ce4b7782bd7
+    val postNotificationPermissionsState = rememberPermissionState(Manifest.permission.POST_NOTIFICATIONS)
+
+    val requestPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            Log.d("Camera", "Granted")
+        } else {
+            Log.d("Camera", "Failed")
+        }
+    }
+
+    LaunchedEffect(postNotificationPermissionsState) {
+        if (postNotificationPermissionsState.status.isGranted) {
+            Log.d("LaunnchedEffect Perm notifications", "ELse")
+        } else {
+            requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+
     Column {
         Text("Hello login screen")
         Button(
             onClick = {
+                Log.d("HELLO NOTIFI", "SD")
+                notificationHelper.showBasicNotification()
                 navController.navigate("home_screen") {
                     popUpTo(navController.graph.startDestinationId) { inclusive = true }
                     launchSingleTop = true
@@ -244,13 +320,34 @@ fun homeScreen(navController: NavController) {
 }
 
 @Composable
-fun settingsScreen(navController: NavController) {
+fun settingsScreen(
+    navController: NavController,
+    handler: Handler,
+    notificationHelper: NotificationHelper,
+    temp: MutableState<Float>
+) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val dataStoreManager = DataStoreManager(context)
     val username = remember { mutableStateOf("") }
     val password = remember { mutableStateOf("") }
     val profilePicture = remember { mutableStateOf("") }
+    val stopFlag = remember { mutableStateOf(false) }
+
+    // https://medium.com/@spparks_/android-concurrency-part-i-runnable-handler-looper-and-threads-d860d9ded9bb
+    // Notification can be interacted with (something happens if you tap it) (2p)
+    // While the app is not on foreground (1p)
+    var task = object : Runnable {
+        override fun run() {
+            if (stopFlag.value) {
+                Log.d("Reminder", "Stopped TASK $stopFlag")
+                return
+            }
+            // Trigger a notification (2p)
+            notificationHelper.showStopNotification()
+            handler.postDelayed(this, 10000)
+        }
+    }
 
     // https://stackoverflow.com/questions/70480709/what-is-the-useeffect-correspondent-in-android-compose-component
     LaunchedEffect(Unit) {
@@ -282,6 +379,23 @@ fun settingsScreen(navController: NavController) {
             Text("Sign out")
         }
 
+        //https://stackoverflow.com/questions/4134203/how-to-use-registerreceiver-method
+        Button(onClick = {
+            val stopReceiver = StopNotificationReceiver(stopFlag)
+            val intentFilter = IntentFilter("com.example.ACTION_STOP")
+            context.registerReceiver(stopReceiver, intentFilter, Context.RECEIVER_EXPORTED)
+            stopFlag.value = false
+            handler.post(task)
+        }) {
+            Text("Start reminder")
+        }
+
+        Button(onClick = {
+            handler.removeCallbacks(task)
+        }) {
+            Text("Stop reminder")
+        }
+
         Text("username: ${username.value}")
         Text("password: ${password.value}")
         Text("Profile_picture: ${profilePicture.value}")
@@ -297,6 +411,7 @@ fun settingsScreen(navController: NavController) {
                 Text("Profile picture not found.")
             }
         }
+        Text("Temperature: ${temp.value}")
     }
 }
 
