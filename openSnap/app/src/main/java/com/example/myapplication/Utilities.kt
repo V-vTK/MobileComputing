@@ -53,7 +53,6 @@ fun BackPressHandler() {
 
 @Composable
 fun imagePicker(selectedImageUri: Uri?, onImageSelected: (Uri?) -> Unit) {
-    // https://medium.com/@yogesh_shinde/implementing-image-video-documents-picker-in-jetpack-compose-73ef846cfffb
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         onImageSelected(uri)
     }
@@ -92,4 +91,18 @@ fun saveImageToLocalStorage(uri: Uri?, context: Context): String? {
     inputStream?.copyTo(outputStream)
 
     return file.absolutePath
+}
+
+
+@Composable
+fun Middleware(
+    isAuthenticated: Boolean,
+    undirect: () -> Unit,
+    content: @Composable () -> Unit
+) {
+    if (isAuthenticated) {
+        content()
+    } else {
+        undirect()
+    }
 }
