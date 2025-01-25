@@ -60,18 +60,30 @@ import java.io.File
 import android.Manifest
 import android.content.Context
 import android.content.IntentFilter
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import com.google.accompanist.permissions.isGranted
 
 
-class MainActivity : ComponentActivity() {
+class MainActivity : ComponentActivity(), SensorEventListener {
+    // https://medium.com/@kevalkanpariya5051/working-of-handler-messagequeue-and-handlerthread-4f2082675986
+    private lateinit var sensorManager: SensorManager
     private lateinit var dataStoreManager: DataStoreManager
     private lateinit var notificationHelper: NotificationHelper
+    private var temperatureSensor: Sensor? = null
     private val handler = Handler(Looper.getMainLooper())
+    private var temp = mutableStateOf(0f)
 
     override fun onCreate(savedInstanceState: Bundle?) {
-
+        // https://developer.android.com/develop/sensors-and-location/sensors/sensors_overview#sensor-availability
+        sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
+        val deviceSensors: List<Sensor> = sensorManager.getSensorList(Sensor.TYPE_ALL)
+        Log.d("Sensors", "device_sensors $deviceSensors")
+        temperatureSensor = sensorManager.getDefaultSensor(Sensor.TYPE_AMBIENT_TEMPERATURE)
         super.onCreate(savedInstanceState)
 
         dataStoreManager = DataStoreManager(this)
@@ -146,12 +158,39 @@ class MainActivity : ComponentActivity() {
                             messageScreen(navController, isDarkTheme, sampleMessages)
                         }
                         composable("settings_screen") {
-                            settingsScreen(navController, handler, notificationHelper)
+                            settingsScreen(navController, handler, notificationHelper, temp)
                         }
                     }
                 }
             }
         }
+    }
+
+    // Use any type of sensor listed here: Sensors Overview | Android Developers (5p)
+    override fun onSensorChanged(event: SensorEvent?) {
+        if (event == null) {
+            Log.d("TEMP", "Sensor event is null")
+            return
+        }
+
+        if (event?.sensor?.type == Sensor.TYPE_AMBIENT_TEMPERATURE) {
+            temp.value = event.values[0]
+            Log.d("TEMP", event.values[0].toString())
+        }
+    }
+
+    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
+        Log.d("Accurarcy change","sensor: $sensor; accuracy: $accuracy")
+    }
+
+    override fun onResume() {
+        super.onResume()
+        sensorManager.registerListener(this, temperatureSensor, SensorManager.SENSOR_DELAY_UI)
+    }
+
+    override fun onPause() {
+        super.onPause()
+        sensorManager.unregisterListener(this)
     }
 }
 
@@ -165,7 +204,6 @@ fun loginScreen(navController: NavController, notificationHelper: NotificationHe
 
     // https://medium.com/@rzmeneghelo/how-to-request-permissions-in-jetpack-compose-a-step-by-step-guide-7ce4b7782bd7
     val postNotificationPermissionsState = rememberPermissionState(Manifest.permission.POST_NOTIFICATIONS)
-    val cameraPermissionsState = rememberPermissionState(Manifest.permission.CAMERA)
 
     val requestPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -182,14 +220,6 @@ fun loginScreen(navController: NavController, notificationHelper: NotificationHe
             Log.d("LaunnchedEffect Perm notifications", "ELse")
         } else {
             requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-        }
-    }
-
-    LaunchedEffect(cameraPermissionsState) {
-        if (cameraPermissionsState.status.isGranted) {
-            Log.d("LaunnchedEffect Perm Camera", "ELse")
-        } else {
-            requestPermissionLauncher.launch(Manifest.permission.CAMERA)
         }
     }
 
@@ -293,7 +323,8 @@ fun homeScreen(navController: NavController) {
 fun settingsScreen(
     navController: NavController,
     handler: Handler,
-    notificationHelper: NotificationHelper
+    notificationHelper: NotificationHelper,
+    temp: MutableState<Float>
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -302,6 +333,9 @@ fun settingsScreen(
     val password = remember { mutableStateOf("") }
     val profilePicture = remember { mutableStateOf("") }
     val stopFlag = remember { mutableStateOf(false) }
+
+    // https://medium.com/@spparks_/android-concurrency-part-i-runnable-handler-looper-and-threads-d860d9ded9bb
+    // Notification can be interacted with (something happens if you tap it) (2p)
     // While the app is not on foreground (1p)
     var task = object : Runnable {
         override fun run() {
@@ -314,7 +348,6 @@ fun settingsScreen(
             handler.postDelayed(this, 10000)
         }
     }
-
 
     // https://stackoverflow.com/questions/70480709/what-is-the-useeffect-correspondent-in-android-compose-component
     LaunchedEffect(Unit) {
@@ -346,6 +379,7 @@ fun settingsScreen(
             Text("Sign out")
         }
 
+        //https://stackoverflow.com/questions/4134203/how-to-use-registerreceiver-method
         Button(onClick = {
             val stopReceiver = StopNotificationReceiver(stopFlag)
             val intentFilter = IntentFilter("com.example.ACTION_STOP")
@@ -377,6 +411,7 @@ fun settingsScreen(
                 Text("Profile picture not found.")
             }
         }
+        Text("Temperature: ${temp.value}")
     }
 }
 
