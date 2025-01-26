@@ -9,6 +9,8 @@ import org.json.JSONObject
 import java.io.IOException
 import java.util.concurrent.CompletableFuture
 
+//https://pocketbase.io/docs/api-collections/#view-collection
+
 // https://stackoverflow.com/questions/5528850/how-do-you-connect-localhost-in-the-android-emulator
 const val PocketbaseApi = "http://10.0.2.2:8090"
 
@@ -86,5 +88,64 @@ suspend fun authWithPassword(email: String, password: String): AuthResponse? {
     } catch (e: Exception) {
         Log.d(tagError, Log.getStackTraceString(e))
         return null
+    }
+}
+
+suspend fun getMessages(authResponse: AuthResponse): Messages? {
+    val client = OkHttpClient()
+    val url =
+        "$PocketbaseApi/api/collections/messages/records?expand=user&perPage=25&sort=-created"
+
+    val request = Request.Builder()
+        .url(url)
+        .addHeader("Authorization", "Bearer ${authResponse.token}")
+        .build()
+
+    try {
+        val future: CallbackFuture = CallbackFuture()
+        client.newCall(request).enqueue(future)
+        val response = future.get() ?: throw IllegalStateException("Most likely timeout")
+        if (response.isSuccessful) {
+            val responseBody = response.body?.string() ?: throw IOException("Empty response body")
+            Log.d("SPECIAL POCKETS", "${response.code}:${response.message} - $responseBody")
+            return Gson().fromJson(responseBody, Messages::class.java)
+        } else {
+            throw IOException("${response.code}:${response.message} - ${response.body?.string()}")
+        }
+    } catch (e: Exception) {
+        Log.d(tagError, Log.getStackTraceString(e))
+        return null
+    }
+}
+
+suspend fun getImage(authResponse: AuthResponse, collection: String, id: String, image: String) {
+    val client = OkHttpClient()
+    val url = "$PocketbaseApi/api/files/$collection/$id/$image?token=${authResponse.token}"
+
+    val request = Request.Builder()
+        .url(url)
+        .addHeader("Authorization", "Bearer ${authResponse.token}")
+        .build()
+
+    try {
+        val future: CallbackFuture = CallbackFuture()
+        client.newCall(request).enqueue(future)
+        val response = future.get() ?: throw IllegalStateException("Most likely timeout")
+
+        if (response.isSuccessful) {
+            val responseBody = response.body?.byteStream() ?: throw IOException("Empty response body")
+        } else {
+            throw IOException("${response.code}:${response.message} - ${response.body?.string()}")
+        }
+    } catch (e: Exception) {
+        Log.d(tagError, Log.getStackTraceString(e))
+    }
+}
+
+fun getImageURL(authResponse: AuthResponse?, message: Message): String {
+    if (authResponse != null) {
+        return "$PocketbaseApi/api/files/${message.collectionId}/${message.id}/${message.photo}?token=${authResponse.token}&thumb=200x200"
+    } else {
+        return "$PocketbaseApi/api/files/${message.collectionId}/${message.id}/${message.photo}?thumb=100x100&token="
     }
 }
