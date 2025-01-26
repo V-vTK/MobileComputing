@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
@@ -25,6 +26,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import coil.compose.rememberAsyncImagePainter
 import coil.request.ImageRequest
+import com.example.myapplication.services.AuthResponse
 import java.io.File
 import java.io.FileOutputStream
 
@@ -105,4 +107,11 @@ fun Middleware(
     } else {
         undirect()
     }
+}
+
+fun isAutenticated(authResponse: MutableState<AuthResponse?>): Boolean {
+    return authResponse?.value?.token != null
+}
+fun isAutenticated(authResponse: AuthResponse?): Boolean {
+    return authResponse?.token != null
 }

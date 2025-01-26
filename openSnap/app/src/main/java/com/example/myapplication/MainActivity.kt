@@ -1,6 +1,5 @@
 package com.example.myapplication
 
-import android.net.Uri
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
@@ -42,7 +41,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -56,24 +54,32 @@ import kotlinx.coroutines.launch
 import android.Manifest
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material.icons.filled.Star
 import com.example.myapplication.notifications.NotificationHelper
+import com.example.myapplication.services.AuthResponse
+import com.example.myapplication.services.AuthStoreManager
+import com.example.myapplication.services.NewUser
+import com.example.myapplication.services.authWithPassword
+import com.example.myapplication.services.createUser
 import com.google.accompanist.permissions.isGranted
 
 
 class MainActivity : ComponentActivity() {
-    private lateinit var dataStoreManager: DataStoreManager
+    private lateinit var authStoreManager: AuthStoreManager
     private lateinit var notificationHelper: NotificationHelper
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        dataStoreManager = DataStoreManager(this)
+        // https://pocketbase.io/docs/api-records/#verification
+
+        authStoreManager = AuthStoreManager(this)
         notificationHelper = NotificationHelper(this)
 
         val sampleMessages = listOf(
             Message("Alice", "Hello!"),
             Message("Bob", "Hello!"),
-            Message("Alice", "React if more fluent :/"),
+            Message("Alice", "React is more fluent :/"),
             Message("Alice", "But it's not too bad, I miss hot-reload though"),
             Message("Alice", "45"),
             Message("Alice", "34"),
@@ -91,7 +97,7 @@ class MainActivity : ComponentActivity() {
             val navController = rememberNavController()
             val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
             val hiddenBottomBar: List<String> = listOf("login_screen", "register_screen")
-            val isAuthenticated = remember { mutableStateOf(false) }
+            val authResponse = remember { mutableStateOf<AuthResponse?>(null) }
 
             ComposeTutorialTheme(darkTheme = isDarkTheme.value) {
                 Scaffold(
@@ -131,14 +137,14 @@ class MainActivity : ComponentActivity() {
                         modifier = Modifier.padding(innerPadding)
                     ) {
                         composable("login_screen") {
-                            loginScreen(navController, notificationHelper)
+                            loginScreen(navController, authResponse, authStoreManager, notificationHelper)
                         }
                         composable("register_screen") {
-                            registerScreen(navController, dataStoreManager)
+                            registerScreen(navController, authResponse, authStoreManager, notificationHelper)
                         }
                         composable("home_screen") {
                             Middleware(
-                                isAuthenticated = isAuthenticated.value,
+                                isAuthenticated = isAutenticated(authResponse),
                                 undirect = { navController.navigate("login_screen") }
                             ) {
                                 homeScreen(navController)
@@ -146,7 +152,7 @@ class MainActivity : ComponentActivity() {
                         }
                         composable("messages_screen") {
                             Middleware(
-                                isAuthenticated = isAuthenticated.value,
+                                isAuthenticated = isAutenticated(authResponse),
                                 undirect = { navController.navigate("login_screen") }
                             ) {
                                 messageScreen(navController, isDarkTheme, sampleMessages)
@@ -154,10 +160,10 @@ class MainActivity : ComponentActivity() {
                         }
                         composable("settings_screen") {
                             Middleware(
-                                isAuthenticated = isAuthenticated.value,
+                                isAuthenticated = isAutenticated(authResponse),
                                 undirect = { navController.navigate("login_screen") }
                             ) {
-                                settingsScreen(navController, notificationHelper)
+                                settingsScreen(navController, authResponse, authStoreManager, notificationHelper, isDarkTheme)
                             }
                         }
                     }
@@ -169,40 +175,48 @@ class MainActivity : ComponentActivity() {
 
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
-fun loginScreen(navController: NavController, notificationHelper: NotificationHelper) {
+fun loginScreen(
+    navController: NavController,
+    authResponseState: MutableState<AuthResponse?>,
+    authStoreManager: AuthStoreManager,
+    notificationHelper1: NotificationHelper
+) {
     BackPressHandler()
 
-    val postNotificationPermissionsState = rememberPermissionState(Manifest.permission.POST_NOTIFICATIONS)
+    var email by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
 
-    val requestPermissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        if (isGranted) {
-            Log.d("Camera", "Granted")
-        } else {
-            Log.d("Camera", "Failed")
-        }
-    }
-
-    LaunchedEffect(postNotificationPermissionsState) {
-        if (postNotificationPermissionsState.status.isGranted) {
-            Log.d("LaunnchedEffect Perm notifications", "ELse")
-        } else {
-            requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-        }
-    }
-
-    Column {
-        Text("Hello login screen")
-        Button(
-            onClick = {
-                navController.navigate("home_screen") {
-                    popUpTo(navController.graph.startDestinationId) { inclusive = true }
-                    launchSingleTop = true
+    Column(
+        modifier = Modifier.fillMaxSize().padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally)
+    {
+        Text("Login screen")
+        TextField(
+            value = email,
+            onValueChange = { email = it },
+            label = { Text("Enter your email") },
+            modifier = Modifier.fillMaxWidth(0.6f)
+        )
+        TextField(
+            value = password,
+            onValueChange = { password = it },
+            label = { Text("Enter your password") },
+            modifier = Modifier.fillMaxWidth(0.6f)
+        )
+        Button(onClick = {
+            CoroutineScope(Dispatchers.Main).launch {
+                val authResponse = authWithPassword(email, password)
+                Log.d("HERE", "Login TRY: ${authResponse.toString()}")
+                if (isAutenticated(authResponse)) {
+                    authResponseState.value = authResponse
+                    navController.navigate("home_screen")
+                } else{
+                    Log.d("FAILED", "STAY")
                 }
             }
-        ) {
-            Text("Login")
+        }) {
+            Text("Submit")
         }
         Button(
             onClick = {
@@ -218,24 +232,29 @@ fun loginScreen(navController: NavController, notificationHelper: NotificationHe
 }
 
 @Composable
-fun registerScreen(navController: NavController, dataStoreManager: DataStoreManager) {
+fun registerScreen(
+    navController: NavController,
+    authResponseState: MutableState<AuthResponse?>,
+    authStoreManager: AuthStoreManager,
+    notificationHelper: NotificationHelper, ) {
+    var email by remember { mutableStateOf("") }
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
-    val selectedImageUri = remember { mutableStateOf<Uri?>(null) }
-    val selectedImageVal = remember { mutableStateOf<String?>(null) }
-    val context = LocalContext.current
-    val dataStoreManager = DataStoreManager(context)
 
     BackPressHandler()
 
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
+        modifier = Modifier.fillMaxSize().padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text("Hello Register Screen", modifier = Modifier.padding(bottom = 16.dp, top= 16.dp))
+        TextField(
+            value = email,
+            onValueChange = { email = it },
+            label = { Text("Enter your email") },
+            modifier = Modifier.fillMaxWidth(0.6f)
+        )
         TextField(
             value = username,
             onValueChange = { username = it },
@@ -249,27 +268,19 @@ fun registerScreen(navController: NavController, dataStoreManager: DataStoreMana
             modifier = Modifier.fillMaxWidth(0.6f)
         )
 
-        imagePicker(selectedImageUri = selectedImageUri.value,
-            onImageSelected = { uri ->
-                Log.d("ImagePickerExample", "Selected Image URI: $uri , $selectedImageUri")
-                val imagePath = saveImageToLocalStorage(uri, context)
-                selectedImageUri.value = Uri.parse(imagePath)
-                selectedImageVal.value = imagePath
-                Log.d("ImagePickerExample", "Saved Image Path: $imagePath")
-            }
-        )
         Button(onClick = {
-            val user = userStore(
-                username = username,
-                password = password,
-                profile_picture = selectedImageVal.value ?: ""
-            )
+            CoroutineScope(Dispatchers.Main).launch {
+                createUser(NewUser(email, password, password, username))
+                val authResponse = authWithPassword(email, password)
+                Log.d("HERE", "NEW USER CREATED ${authResponse.toString()}")
+                if (isAutenticated(authResponse)) {
+                    authResponseState.value = authResponse
+                    navController.navigate("home_screen")
+                } else{
+                    Log.d("FAILED", "STAY")
+                }
 
-            CoroutineScope(Dispatchers.IO).launch {
-                dataStoreManager.saveToDataStore(user)
             }
-
-            navController.navigate("home_screen")
         }) {
             Text("Submit")
         }
@@ -287,31 +298,40 @@ fun homeScreen(navController: NavController) {
 @Composable
 fun settingsScreen(
     navController: NavController,
+    authResponse: MutableState<AuthResponse?>,
+    authStoreManager: AuthStoreManager,
     notificationHelper: NotificationHelper,
+    isDarkTheme: MutableState<Boolean>,
 ) {
-    val context = LocalContext.current
-    val dataStoreManager = DataStoreManager(context)
     val username = remember { mutableStateOf("") }
-    val password = remember { mutableStateOf("") }
-    val profilePicture = remember { mutableStateOf("") }
-
 
     LaunchedEffect(Unit) {
-        dataStoreManager.getFromDataStore().collect { userStore ->
-            username.value = userStore.username
-            password.value = userStore.password
-            profilePicture.value = userStore.profile_picture
+        authStoreManager.getFromDataStore().collect { userStore ->
+            username.value = userStore.record.email
         }
     }
+
     Column {
-        Text("Hello settings")
+        Text("Settings")
+        Text("Email: ${authResponse.value?.record?.email}")
         Button(onClick = {
+            authResponse.value = null
             navController.navigate("login_screen") {
             popUpTo(navController.graph.startDestinationId) { inclusive = true }
             launchSingleTop = true }
         }
         ) {
             Text("Sign out")
+        }
+        IconButton(
+            onClick = { isDarkTheme.value = !isDarkTheme.value },
+            modifier = Modifier.padding(top = 6.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Star,
+                contentDescription = "Toggle theme",
+                tint = MaterialTheme.colorScheme.primary
+            )
         }
     }
 }
@@ -377,3 +397,8 @@ fun MessageList(messages: List<Message>, modifier: Modifier = Modifier) {
         }
     }
 }
+
+// Notifications
+// Camera
+// Chatroom
+// Load from storage
