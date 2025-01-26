@@ -99,6 +99,28 @@ class MainActivity : ComponentActivity() {
             val hiddenBottomBar: List<String> = listOf("login_screen", "register_screen")
             val authResponse = remember { mutableStateOf<AuthResponse?>(null) }
 
+
+            LaunchedEffect(Unit) {
+                val storeResponse = authStoreManager.getFromDataStore()
+
+                storeResponse.collect { response ->
+                    Log.d("FROM STORE", response.toString())
+                    authResponse.value = response
+
+                    if (isAutenticated(authResponse.value)) {
+                        Log.d("FROM STORE", "Valid")
+                        navController.navigate("home_screen") {
+                            popUpTo(0) { inclusive = true }
+                        }
+                    } else {
+                        Log.d("FROM STORE", "Not valid")
+                        navController.navigate("login_screen") {
+                            popUpTo(0) { inclusive = true }
+                        }
+                    }
+                }
+            }
+
             ComposeTutorialTheme(darkTheme = isDarkTheme.value) {
                 Scaffold(
                     bottomBar = {
@@ -173,13 +195,12 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-@OptIn(ExperimentalPermissionsApi::class)
 @Composable
 fun loginScreen(
     navController: NavController,
     authResponseState: MutableState<AuthResponse?>,
     authStoreManager: AuthStoreManager,
-    notificationHelper1: NotificationHelper
+    notificationHelper: NotificationHelper
 ) {
     BackPressHandler()
 
@@ -208,8 +229,9 @@ fun loginScreen(
             CoroutineScope(Dispatchers.Main).launch {
                 val authResponse = authWithPassword(email, password)
                 Log.d("HERE", "Login TRY: ${authResponse.toString()}")
-                if (isAutenticated(authResponse)) {
+                if (isAutenticated(authResponse) && authResponse != null) {
                     authResponseState.value = authResponse
+                    authStoreManager.saveToDataStore(authResponse)
                     navController.navigate("home_screen")
                 } else{
                     Log.d("FAILED", "STAY")
@@ -273,8 +295,9 @@ fun registerScreen(
                 createUser(NewUser(email, password, password, username))
                 val authResponse = authWithPassword(email, password)
                 Log.d("HERE", "NEW USER CREATED ${authResponse.toString()}")
-                if (isAutenticated(authResponse)) {
+                if (isAutenticated(authResponse) && authResponse != null) {
                     authResponseState.value = authResponse
+                    authStoreManager.saveToDataStore(authResponse)
                     navController.navigate("home_screen")
                 } else{
                     Log.d("FAILED", "STAY")
@@ -315,16 +338,22 @@ fun settingsScreen(
         Text("Settings")
         Text("Email: ${authResponse.value?.record?.email}")
         Button(onClick = {
-            authResponse.value = null
+            CoroutineScope(Dispatchers.Main).launch {
+                authResponse.value = null
+                authStoreManager.clearDataStore()
+            }
             navController.navigate("login_screen") {
             popUpTo(navController.graph.startDestinationId) { inclusive = true }
             launchSingleTop = true }
+            isDarkTheme.value = true
         }
         ) {
             Text("Sign out")
         }
         IconButton(
-            onClick = { isDarkTheme.value = !isDarkTheme.value },
+            onClick = {
+                isDarkTheme.value = !isDarkTheme.value
+            },
             modifier = Modifier.padding(top = 6.dp)
         ) {
             Icon(

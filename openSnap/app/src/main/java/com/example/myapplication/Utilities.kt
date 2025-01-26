@@ -110,8 +110,8 @@ fun Middleware(
 }
 
 fun isAutenticated(authResponse: MutableState<AuthResponse?>): Boolean {
-    return authResponse?.value?.token != null
+    return !authResponse?.value?.token.isNullOrEmpty()
 }
 fun isAutenticated(authResponse: AuthResponse?): Boolean {
-    return authResponse?.token != null
+    return !authResponse?.token.isNullOrEmpty()
 }
