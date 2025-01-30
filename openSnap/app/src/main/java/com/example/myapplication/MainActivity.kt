@@ -34,6 +34,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.BottomAppBar
 import androidx.compose.material3.Button
@@ -392,7 +393,7 @@ fun CameraPreview(
             Text("The applicationn needs camera permissions", textAlign = TextAlign.Center)
             Spacer(Modifier.height(16.dp))
             Button(onClick = { cameraPermissionsState.launchPermissionRequest() }) {
-                Text("Unleash the Camera!")
+                Text("Give permissions to camera")
             }
         }
     }
@@ -562,6 +563,16 @@ fun messageScreen(navController: NavController, authResponse: MutableState<AuthR
                 modifier = Modifier
                     .padding(horizontal = 32.dp, vertical = 8.dp)
             )
+            IconButton(onClick = {
+                CoroutineScope(Dispatchers.IO).launch {
+                    val messages = getMessages(authResponse.value!!)
+                    messageViewModel.messagesState.value = messages
+                }
+            }, modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp)
+            ) {
+                Icon(imageVector = Icons.Filled.Refresh, contentDescription = "fetch messages")
+
+            }
         }
 
         val messages = messageViewModel.messagesState.value

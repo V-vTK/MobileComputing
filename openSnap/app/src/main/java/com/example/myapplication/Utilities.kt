@@ -19,11 +19,9 @@ import com.example.myapplication.services.Messages
 fun handleBackPress(activity: Activity?, backPressedTime: Long, onBackPressedTimeUpdated: (Long) -> Unit) {
     val currentTime = System.currentTimeMillis()
     if (currentTime - backPressedTime < 500) {
-        Log.d("BackPress2", "Exiting activity, currentTime: $currentTime, backPressedTime: $backPressedTime")
         activity?.finish()
     } else {
         onBackPressedTimeUpdated(currentTime)
-        Log.d("BackPress1", "Exiting activity, currentTime: $currentTime, backPressedTime: $backPressedTime")
     }
 }
 
