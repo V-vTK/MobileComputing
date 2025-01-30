@@ -1,34 +1,36 @@
 package com.example.myapplication
 
+import android.Manifest
+import android.content.Context
+import android.media.ExifInterface
 import android.os.Bundle
 import android.util.Log
+import android.view.Surface
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.camera.compose.CameraXViewfinder
+import androidx.camera.core.ImageCapture
+import androidx.camera.core.ImageCaptureException
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
-import com.example.myapplication.ui.theme.ComposeTutorialTheme
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.Home
@@ -38,21 +40,27 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.ui.graphics.RectangleShape
 import coil.compose.rememberAsyncImagePainter
 import com.example.myapplication.notifications.NotificationHelper
 import com.example.myapplication.services.AuthResponse
@@ -62,24 +70,19 @@ import com.example.myapplication.services.NewUser
 import com.example.myapplication.services.SettingsStore
 import com.example.myapplication.services.authWithPassword
 import com.example.myapplication.services.createUser
-import com.example.myapplication.services.getImage
 import com.example.myapplication.services.getImageURL
 import com.example.myapplication.services.getMessages
-import com.google.accompanist.permissions.rememberPermissionState
-import kotlinx.coroutines.flow.first
-import android.Manifest
-import androidx.camera.compose.CameraXViewfinder
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.wrapContentSize
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
-import androidx.compose.ui.text.style.TextAlign
-import androidx.lifecycle.LifecycleOwner
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.myapplication.services.uploadMessage
+import com.example.myapplication.ui.theme.ComposeTutorialTheme
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.PermissionState
 import com.google.accompanist.permissions.isGranted
-import com.google.accompanist.permissions.shouldShowRationale
+import com.google.accompanist.permissions.rememberPermissionState
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import java.io.File
 
 
 class MainActivity : ComponentActivity() {
@@ -89,8 +92,6 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        // https://pocketbase.io/docs/api-records/#verification
 
         authStoreManager = AuthStoreManager(this)
         notificationHelper = NotificationHelper(this)
@@ -102,6 +103,8 @@ class MainActivity : ComponentActivity() {
             val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
             val hiddenBottomBar: List<String> = listOf("login_screen", "register_screen")
             val authResponse = remember { mutableStateOf<AuthResponse?>(null) }
+            val messageViewModel = remember { MessageViewModel() }
+            val cameraViewModel = remember { CameraPreviewViewModel() }
 
             // Two datastores because of interference
             LaunchedEffect(Unit) {
@@ -109,14 +112,13 @@ class MainActivity : ComponentActivity() {
                 isDarkTheme.value = settingsStore.getDarkMode().first()
 
                 storeResponse.collect { response ->
-                    Log.d("FROM STORE", response.toString())
                     authResponse.value = response
 
                     if (isAutenticated(authResponse.value)) {
-                        Log.d("AUTHSTORE", "Token valid")
+                        Log.d("Authstore", "Token valid")
                         navController.navigate("home_screen")
                     } else {
-                        Log.d("AUTHSTORE", "Token does not exist")
+                        Log.d("Authstore", "Token does not exist")
                         navController.navigate("login_screen")
                     }
                 }
@@ -171,8 +173,7 @@ class MainActivity : ComponentActivity() {
                                 isAuthenticated = isAutenticated(authResponse),
                                 undirect = { navController.navigate("login_screen") }
                             ) {
-                                val viewModel = remember { CameraPreviewViewModel() }
-                                homeScreen(navController, authResponse, authStoreManager, notificationHelper, modifier = Modifier.fillMaxSize(), viewModel)
+                                homeScreen(navController, authResponse, authStoreManager, notificationHelper, modifier = Modifier.fillMaxSize(), cameraViewModel)
                             }
                         }
                         composable("messages_screen") {
@@ -180,7 +181,7 @@ class MainActivity : ComponentActivity() {
                                 isAuthenticated = isAutenticated(authResponse),
                                 undirect = { navController.navigate("login_screen") }
                             ) {
-                                messageScreen(navController, authResponse, isDarkTheme)
+                                messageScreen(navController, authResponse, isDarkTheme, messageViewModel)
                             }
                         }
                         composable("settings_screen") {
@@ -207,11 +208,14 @@ fun loginScreen(
 ) {
     BackPressHandler()
 
+    val context = LocalContext.current
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
 
     Column(
-        modifier = Modifier.fillMaxSize().padding(16.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally)
     {
@@ -231,13 +235,13 @@ fun loginScreen(
         Button(onClick = {
             CoroutineScope(Dispatchers.Main).launch {
                 val authResponse = authWithPassword(email, password)
-                Log.d("HERE", "Login TRY: ${authResponse.toString()}")
                 if (isAutenticated(authResponse) && authResponse != null) {
+                    Toast.makeText(context, "Login successful", Toast.LENGTH_LONG).show()
                     authResponseState.value = authResponse
                     authStoreManager.saveToDataStore(authResponse)
                     navController.navigate("home_screen")
                 } else{
-                    Log.d("FAILED", "STAY")
+                    Toast.makeText(context, "Login failed", Toast.LENGTH_LONG).show()
                 }
             }
         }) {
@@ -261,7 +265,9 @@ fun registerScreen(
     navController: NavController,
     authResponseState: MutableState<AuthResponse?>,
     authStoreManager: AuthStoreManager,
-    notificationHelper: NotificationHelper, ) {
+    notificationHelper: NotificationHelper,
+) {
+    val context = LocalContext.current
     var email by remember { mutableStateOf("") }
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -269,7 +275,9 @@ fun registerScreen(
     BackPressHandler()
 
     Column(
-        modifier = Modifier.fillMaxSize().padding(16.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -293,17 +301,18 @@ fun registerScreen(
             modifier = Modifier.fillMaxWidth(0.6f)
         )
 
+        // https://developer.android.com/guide/topics/ui/notifiers/toasts
         Button(onClick = {
             CoroutineScope(Dispatchers.Main).launch {
                 createUser(NewUser(email, password, password, username))
                 val authResponse = authWithPassword(email, password)
-                Log.d("HERE", "NEW USER CREATED ${authResponse.toString()}")
                 if (isAutenticated(authResponse) && authResponse != null) {
+                    Toast.makeText(context, "New user created", Toast.LENGTH_LONG).show()
                     authResponseState.value = authResponse
                     authStoreManager.saveToDataStore(authResponse)
                     navController.navigate("home_screen")
                 } else{
-                    Log.d("FAILED", "STAY")
+                    Toast.makeText(context, "user creation failed", Toast.LENGTH_LONG).show()
                 }
 
             }
@@ -327,64 +336,60 @@ fun homeScreen(
     // https://aboyi.medium.com/how-to-make-your-own-android-camera-app-without-knowing-how-aca3364358b
     val cameraPermissionsState = rememberPermissionState(Manifest.permission.CAMERA)
 
+    var text: MutableState<String> = remember { mutableStateOf("") }
+
     val requestPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted ->
         if (isGranted) {
-            Log.d("Camera", "Granted")
+            Log.d("Camera permissions", "Granted")
         } else {
-            Log.d("Camera", "Failed")
+            Log.d("Camera permissions", "Failed")
         }
     }
 
     LaunchedEffect(cameraPermissionsState) {
         if (cameraPermissionsState.status.isGranted) {
-            Log.d("LaunnchedEffect Perm notifications", "Granted")
+            Log.d("Camera permissions", "Newly granted")
         } else {
             requestPermissionLauncher.launch(Manifest.permission.CAMERA)
         }
     }
 
-    Column {
-        Text("Hello home screen")
-        Button(onClick = {
-            CoroutineScope(Dispatchers.IO).launch {
-                if (authResponse.value != null) {
-                    val messages = getMessages(authResponse.value!!)
-                    Log.d("MESSAGES", messages.toString())
-                    requestPermissionLauncher.launch(Manifest.permission.CAMERA)
-                } else {
-                    Log.d("AUTHRESPONSE", "NONE")
-                }
-            }
-        }
-        ) {
-            Text("TEst messages")
-        }
-        CameraPreview(cameraPermissionsState, modifier, viewModel)
-
+    Column(
+        modifier = Modifier.fillMaxSize()
+    ) {
+        CameraPreview(cameraPermissionsState, modifier.fillMaxWidth().weight(1f), viewModel, authResponse, text)
+        TextField(
+            value = text.value,
+            onValueChange = { text.value = it },
+            label = { Text("Enter message") },
+            modifier = Modifier.fillMaxWidth().padding(16.dp)
+        )
     }
+
 }
 
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
-fun CameraPreview(cameraPermissionsState: PermissionState, modifier: Modifier, viewModel: CameraPreviewViewModel) {
+fun CameraPreview(
+    cameraPermissionsState: PermissionState,
+    modifier: Modifier,
+    viewModel: CameraPreviewViewModel,
+    authResponse: MutableState<AuthResponse?>,
+    text: MutableState<String>
+) {
     if (cameraPermissionsState.status.isGranted) {
-        CameraPreviewContent(viewModel, modifier)
+        CameraPreviewContent(viewModel, modifier, authResponse, text)
     } else {
         Column(
-            modifier = modifier.fillMaxSize().wrapContentSize().widthIn(max = 480.dp),
+            modifier = modifier
+                .fillMaxSize()
+                .wrapContentSize()
+                .widthIn(max = 480.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            val textToShow = if (cameraPermissionsState.status.shouldShowRationale) {
-                "Whoops! Looks like we need your camera to work our magic!" +
-                        "Don't worry, we just wanna see your pretty face (and maybe some cats).  " +
-                        "Grant us permission and let's get this party started!"
-            } else {
-                "Hi there! We need your camera to work our magic! ✨\n" +
-                        "Grant us permission and let's get this party started! \uD83C\uDF89"
-            }
-            Text(textToShow, textAlign = TextAlign.Center)
+            Text("The applicationn needs camera permissions", textAlign = TextAlign.Center)
             Spacer(Modifier.height(16.dp))
             Button(onClick = { cameraPermissionsState.launchPermissionRequest() }) {
                 Text("Unleash the Camera!")
@@ -393,14 +398,19 @@ fun CameraPreview(cameraPermissionsState: PermissionState, modifier: Modifier, v
     }
 }
 
+// https://medium.com/androiddevelopers/tap-to-focus-mastering-camerax-transformations-in-jetpack-compose-440853280a6e
 @Composable
 fun CameraPreviewContent(
     viewModel: CameraPreviewViewModel,
     modifier: Modifier = Modifier,
+    authResponse: MutableState<AuthResponse?>,
+    text: MutableState<String>,
     lifecycleOwner: LifecycleOwner = LocalLifecycleOwner.current
 ) {
-    val surfaceRequest by viewModel.surfaceRequest.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val surfaceRequest by viewModel.surfaceRequest.collectAsStateWithLifecycle()
+    val displayRotation = context.display?.rotation
+
     LaunchedEffect(lifecycleOwner) {
         viewModel.bindToCamera(context.applicationContext, lifecycleOwner)
     }
@@ -408,10 +418,64 @@ fun CameraPreviewContent(
     surfaceRequest?.let { request ->
         CameraXViewfinder(
             surfaceRequest = request,
-            modifier = modifier
+            modifier = modifier.pointerInput(Unit) {
+                detectTapGestures {
+                    capturePhoto(context, viewModel.imageCapture, displayRotation, authResponse, text)
+                }
+            }
         )
     }
 }
+
+// https://developer.android.com/media/camera/camerax/take-photo#kotlin
+// https://github.com/Coding-Meet/Camera-Using-CameraX
+// https://stackoverflow.com/questions/61172891/camerax-image-rotation-with-fixed-sreenorientation
+fun capturePhoto(
+    context: Context,
+    imageCapture: ImageCapture,
+    displayRotation: Int?,
+    authResponse: MutableState<AuthResponse?>,
+    text: MutableState<String>
+) {
+    val photoFile = File(
+        context.externalMediaDirs.firstOrNull(),
+        "latest_photo.jpg"
+    )
+
+    val outputOptions = ImageCapture.OutputFileOptions.Builder(photoFile).build()
+
+    val rotationDegrees = (displayRotation ?: Surface.ROTATION_0) + Surface.ROTATION_90
+
+    imageCapture.takePicture(
+        outputOptions,
+        ContextCompat.getMainExecutor(context),
+        object : ImageCapture.OnImageSavedCallback {
+            override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
+                val exif = ExifInterface(photoFile)
+                val rotation = when (rotationDegrees) {
+                    Surface.ROTATION_90 -> ExifInterface.ORIENTATION_ROTATE_90
+                    Surface.ROTATION_180 -> ExifInterface.ORIENTATION_ROTATE_180
+                    Surface.ROTATION_270 -> ExifInterface.ORIENTATION_ROTATE_270
+                    else -> ExifInterface.ORIENTATION_NORMAL
+                }
+                exif.setAttribute(ExifInterface.TAG_ORIENTATION, rotation.toString())
+                exif.saveAttributes()
+
+                Toast.makeText(context, "Message sent", Toast.LENGTH_LONG).show()
+
+                val atomicAuthResponse = authResponse.value
+                if (atomicAuthResponse  != null) {
+                    uploadMessage(atomicAuthResponse, text.value, photoFile)
+                }
+            }
+
+            override fun onError(exception: ImageCaptureException) {
+                Toast.makeText(context, "Photo capturing failed", Toast.LENGTH_LONG).show()
+            }
+        }
+    )
+}
+
 
 @Composable
 fun settingsScreen(
@@ -431,55 +495,60 @@ fun settingsScreen(
     }
 
     Column {
-        Text("Settings")
-        Text("Email: ${authResponse.value?.record?.email}")
-        Button(onClick = {
-            CoroutineScope(Dispatchers.Main).launch {
-                authResponse.value = null
-                authStoreManager.clearDataStore()
-            }
-            navController.navigate("login_screen") {
-            popUpTo(navController.graph.startDestinationId) { inclusive = true }
-            launchSingleTop = true }
-            isDarkTheme.value = true
-        }
-        ) {
-            Text("Sign out")
-        }
-        IconButton(
-            onClick = {
-                isDarkTheme.value = !isDarkTheme.value
+        Text(
+            text = "Settings",
+            style = MaterialTheme.typography.headlineLarge.copy(
+                color = MaterialTheme.colorScheme.primary, fontWeight = MaterialTheme.typography.headlineLarge.fontWeight),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+        )
+
+        Text("Email: ${authResponse.value?.record?.email}",
+            style = MaterialTheme.typography.headlineSmall.copy(
+                color = MaterialTheme.colorScheme.primary),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+
+        Row(modifier = Modifier.padding(vertical = 6.dp, horizontal = 16.dp)) {
+            Button(onClick = {
                 CoroutineScope(Dispatchers.Main).launch {
-                    settingsStore.saveToDataStore(isDarkTheme.value)
+                    authResponse.value = null
+                    authStoreManager.clearDataStore()
                 }
-            },
-            modifier = Modifier.padding(top = 6.dp)
-        ) {
-            Icon(
-                imageVector = Icons.Default.Star,
-                contentDescription = "Toggle theme",
-                tint = MaterialTheme.colorScheme.primary
-            )
+                navController.navigate("login_screen") {
+                popUpTo(navController.graph.startDestinationId) { inclusive = true }
+                launchSingleTop = true }
+                isDarkTheme.value = true
+            }
+            ) {
+                Text("Sign out")
+            }
+
+            Button(
+                onClick = {
+                    isDarkTheme.value = !isDarkTheme.value
+                    CoroutineScope(Dispatchers.Main).launch {
+                        settingsStore.saveToDataStore(isDarkTheme.value)
+                    }
+                },
+                modifier = Modifier.padding(horizontal = 6.dp)
+            ) {
+                Text("Switch Theme")
+            }
         }
     }
 }
 
 @Composable
-fun messageScreen(navController: NavController, authResponse: MutableState<AuthResponse?>, isDarkTheme: MutableState<Boolean>) {
-    val messagesState = remember { mutableStateOf<List<Message>?>(null) }
+fun messageScreen(navController: NavController, authResponse: MutableState<AuthResponse?>, isDarkTheme: MutableState<Boolean>, messageViewModel: MessageViewModel) {
+    val context = LocalContext.current
 
     LaunchedEffect(authResponse.value) {
-        if (authResponse.value != null) {
+        if (authResponse.value == null) {
+            Toast.makeText(context, "Authentication state not OK", Toast.LENGTH_LONG).show()
+        } else if (messageViewModel.messagesState.value == null) {
             CoroutineScope(Dispatchers.IO).launch {
                 val messages = getMessages(authResponse.value!!)
-                Log.d("MESSAGES", messages.toString())
-                if (messages != null) {
-                    messagesState.value = messages.items
-                    getImage(authResponse.value!!, messages.items[0].collectionId, messages.items[0].id, messages.items[0].photo)
-                }
+                messageViewModel.messagesState.value = messages
             }
-        } else {
-            Log.d("AUTHRESPONSE", "NONE")
         }
     }
 
@@ -489,26 +558,17 @@ fun messageScreen(navController: NavController, authResponse: MutableState<AuthR
                 text = "Messages",
                 style = MaterialTheme.typography.headlineLarge.copy(
                     color = MaterialTheme.colorScheme.primary,
-                    fontFamily = androidx.compose.ui.text.font.FontFamily.Serif
                 ),
                 modifier = Modifier
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .padding(horizontal = 32.dp, vertical = 8.dp)
             )
-            IconButton(
-                onClick = { isDarkTheme.value = !isDarkTheme.value },
-                modifier = Modifier.padding(top = 6.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Settings,
-                    contentDescription = "Toggle theme",
-                    tint = MaterialTheme.colorScheme.primary
-                )
-            }
         }
-        messagesState.value?.let { messages ->
-            MessageList(authResponse, messages = messages)
-        } ?: run {
-            Log.d("NULL", "NO MESSAGE")
+
+        val messages = messageViewModel.messagesState.value
+        if (messages != null) {
+            MessageList(authResponse, messages = messages.items)
+        } else {
+            Text("No messages available")
         }
     }
 }
@@ -517,7 +577,11 @@ fun messageScreen(navController: NavController, authResponse: MutableState<AuthR
 @Composable
 fun MessageCard(authResponse: MutableState<AuthResponse?>, msg: Message, modifier: Modifier = Modifier) {
     val imagePainter = rememberAsyncImagePainter(getImageURL(authResponse.value, msg))
-    Column (Modifier.fillMaxWidth().border(2.dp, MaterialTheme.colorScheme.onSecondary, RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.background).padding(vertical = 20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+    Column (
+        Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.background)
+            .padding(vertical = 20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Row(modifier = Modifier.padding(2.dp)) {
             Text(
                 text = msg.expand.user.name,
@@ -540,7 +604,11 @@ fun MessageCard(authResponse: MutableState<AuthResponse?>, msg: Message, modifie
             Image(
                 painter = imagePainter,
                 contentDescription = "Picture",
-                modifier = Modifier.width(250.dp).height(150.dp).clip(RectangleShape).padding(0.dp)
+                modifier = Modifier
+                    .width(300.dp)
+                    .height(200.dp)
+                    .clip(RectangleShape)
+                    .padding(0.dp)
             )
             Text(
                 text = msg.text,
@@ -559,6 +627,3 @@ fun MessageList(authResponse: MutableState<AuthResponse?>, messages: List<Messag
         }
     }
 }
-
-// Notifications
-// Camera, upload

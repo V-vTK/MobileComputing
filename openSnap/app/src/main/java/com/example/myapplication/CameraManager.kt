@@ -1,7 +1,11 @@
 package com.example.myapplication
 
 import android.content.Context
-import androidx.camera.core.CameraSelector.DEFAULT_FRONT_CAMERA
+import android.util.Log
+import android.view.Surface
+import androidx.camera.core.CameraControl
+import androidx.camera.core.CameraSelector.DEFAULT_BACK_CAMERA
+import androidx.camera.core.ImageCapture
 import androidx.camera.core.Preview
 import androidx.camera.core.SurfaceRequest
 import androidx.camera.lifecycle.ProcessCameraProvider
@@ -19,6 +23,9 @@ import kotlinx.coroutines.flow.update
 class CameraPreviewViewModel : ViewModel() {
     private val _surfaceRequest = MutableStateFlow<SurfaceRequest?>(null)
     val surfaceRequest: StateFlow<SurfaceRequest?> = _surfaceRequest
+    private var cameraControl: CameraControl? = null
+
+    val imageCapture = ImageCapture.Builder().setTargetRotation(Surface.ROTATION_0).build()
 
     private val cameraPreviewUseCase = Preview.Builder().build().apply {
         setSurfaceProvider { newSurfaceRequest ->
@@ -26,12 +33,20 @@ class CameraPreviewViewModel : ViewModel() {
         }
     }
 
-    suspend fun bindToCamera(appContext: Context, lifecycleOwner: LifecycleOwner) {
+    suspend fun bindToCamera(
+        appContext: Context,
+        lifecycleOwner: LifecycleOwner,
+    ) {
         val processCameraProvider = ProcessCameraProvider.awaitInstance(appContext)
-        processCameraProvider.bindToLifecycle(
-            lifecycleOwner, DEFAULT_FRONT_CAMERA, cameraPreviewUseCase
+        val camera = processCameraProvider.bindToLifecycle(
+            lifecycleOwner, DEFAULT_BACK_CAMERA, cameraPreviewUseCase, imageCapture
         )
 
-        try { awaitCancellation() } finally { processCameraProvider.unbindAll() }
+        cameraControl = camera.cameraControl
+
+        try { awaitCancellation() } finally {
+            processCameraProvider.unbindAll()
+            cameraControl = null
+        }
     }
 }
