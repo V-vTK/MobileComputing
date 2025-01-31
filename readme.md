@@ -11,14 +11,15 @@ Authentication and caching (10p)
 - NextJS like middleware to easily check routes for authentication. This is done on the frontend so inherently not safe but still offers benefits trough usability. The backend (Pocketbase) does autentication for all API-calls.
 - Only some routes contain the bottom bar  
 
-Serverside functionality (10p)
+Serverside functionality (5p)
 - The user is able to send messages to a common chat
+- Other can see these messages
 - The user can't send chats under others name and without sign in up
 - The user is able to easily send pictures taken by the applications camera.
 - There is direct feedback given by "toasts" on many features like login, sign up, message sent.
 
 Camera (10p)
-- Android native Camera is used inside the app
+- Native Android camera is used inside the app
 - The camera is integrated into the app's features
 - Permissions are asked for the camera
 - Complete camera preview 
