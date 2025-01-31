@@ -24,6 +24,16 @@ Camera (10p)
 - Permissions are asked for the camera
 - Complete camera preview 
 
+# Localhosted installation
+Either use the default server hosted by me or change the Pocketbase address to the localhosted version.
+Get the pocketbase executible https://pocketbase.io/ unzip and run ./pocketbase serve in the same folder.
+Load the backup, which contains the collection settings. After that the application should work. Launch the app inside Android studio simulator.
+
+Admin credentials for the backup are:
+- test@email.com
+- 1234567890
+
+
 ### HW1 ###
 Requirements:
 - At least one custom image (1p)
