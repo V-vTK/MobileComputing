@@ -1,116 +1,127 @@
 package com.example.myapplication
 
-import android.net.Uri
+import android.Manifest
+import android.content.Context
+import android.media.ExifInterface
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.util.Log
+import android.view.Surface
+import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.camera.compose.CameraXViewfinder
+import androidx.camera.core.ImageCapture
+import androidx.camera.core.ImageCaptureException
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
-import com.example.myapplication.ui.theme.ComposeTutorialTheme
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.BottomAppBar
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import coil.compose.rememberAsyncImagePainter
+import com.example.myapplication.services.AuthResponse
+import com.example.myapplication.services.AuthStoreManager
+import com.example.myapplication.services.Message
+import com.example.myapplication.services.NewUser
+import com.example.myapplication.services.SettingsStore
+import com.example.myapplication.services.authWithPassword
+import com.example.myapplication.services.createUser
+import com.example.myapplication.services.getImageURL
+import com.example.myapplication.services.getMessages
+import com.example.myapplication.services.uploadMessage
+import com.example.myapplication.ui.theme.ComposeTutorialTheme
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
+import com.google.accompanist.permissions.PermissionState
+import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.io.File
-import android.Manifest
-import android.content.Context
-import android.content.IntentFilter
-import android.hardware.Sensor
-import android.hardware.SensorEvent
-import android.hardware.SensorEventListener
-import android.hardware.SensorManager
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import com.google.accompanist.permissions.isGranted
 
 
-class MainActivity : ComponentActivity(), SensorEventListener {
-    // https://medium.com/@kevalkanpariya5051/working-of-handler-messagequeue-and-handlerthread-4f2082675986
-    private lateinit var sensorManager: SensorManager
-    private lateinit var dataStoreManager: DataStoreManager
-    private lateinit var notificationHelper: NotificationHelper
-    private var temperatureSensor: Sensor? = null
-    private val handler = Handler(Looper.getMainLooper())
-    private var temp = mutableStateOf(0f)
+class MainActivity : ComponentActivity() {
+    private lateinit var authStoreManager: AuthStoreManager
+    private lateinit var settingsStore: SettingsStore
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        // https://developer.android.com/develop/sensors-and-location/sensors/sensors_overview#sensor-availability
-        sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
-        val deviceSensors: List<Sensor> = sensorManager.getSensorList(Sensor.TYPE_ALL)
-        Log.d("Sensors", "device_sensors $deviceSensors")
-        temperatureSensor = sensorManager.getDefaultSensor(Sensor.TYPE_AMBIENT_TEMPERATURE)
         super.onCreate(savedInstanceState)
 
-        dataStoreManager = DataStoreManager(this)
-        notificationHelper = NotificationHelper(this)
+        authStoreManager = AuthStoreManager(this)
+        settingsStore = SettingsStore(this)
 
-        val sampleMessages = listOf(
-            Message("Alice", "Hello!"),
-            Message("Bob", "Hello!"),
-            Message("Alice", "React if more fluent :/"),
-            Message("Alice", "But it's not too bad, I miss hot-reload though"),
-            Message("Alice", "45"),
-            Message("Alice", "34"),
-            Message("Alice", "32"),
-            Message("Alice", "23"),
-            Message("Alice", "123"),
-            Message("Alice", "123"),
-            Message("Alice", "123"),
-            Message("Alice", "123"),
-            Message("Alice", "125"),
-        )
-
-        // https://github.com/KaushalVasava/JetPackCompose_Basic/blob/navigate-back-with-result/app/src/main/java/com/lahsuak/apps/jetpackcomposebasic/MainActivity.kt
         setContent {
             val isDarkTheme = remember { mutableStateOf(true) }
             val navController = rememberNavController()
             val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
             val hiddenBottomBar: List<String> = listOf("login_screen", "register_screen")
+            val authResponse = remember { mutableStateOf<AuthResponse?>(null) }
+            val messageViewModel = remember { MessageViewModel() }
+            val cameraViewModel = remember { CameraPreviewViewModel() }
+
+            // Two datastores because of interference
+            LaunchedEffect(Unit) {
+                val storeResponse = authStoreManager.getFromDataStore()
+                isDarkTheme.value = settingsStore.getDarkMode().first()
+
+                storeResponse.collect { response ->
+                    authResponse.value = response
+
+                    if (isAutenticated(authResponse.value)) {
+                        Log.d("Authstore", "Token valid")
+                        navController.navigate("home_screen")
+                    } else {
+                        Log.d("Authstore", "Token invalid")
+                        navController.navigate("login_screen")
+                    }
+                }
+
+            }
 
             ComposeTutorialTheme(darkTheme = isDarkTheme.value) {
                 Scaffold(
@@ -139,103 +150,99 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                         }
                     }
                 ) { innerPadding ->
-                    // At least 2 distinct views that can be moved between using buttons you created (5p)
+                    // Wanted to keep it simple so very loosely based on this
+                    // https://auth0.com/blog/android-authentication-jetpack-compose-part-1/
+                    // https://medium.com/@anna972606/navigation-in-jetpack-compose-p2-c24e1f145372
+                    // Basic idea from NextJS where all routes are first intercepted with middleware hence 'Middleware' component.
+                    // Proper auth is done in the backend - never trust the frontend - Pocketbase has RLS, row-level-security to handle user information safely.
                     NavHost(
                         navController = navController,
                         startDestination = "login_screen",
                         modifier = Modifier.padding(innerPadding)
                     ) {
                         composable("login_screen") {
-                            loginScreen(navController, notificationHelper)
+                            loginScreen(navController, authResponse, authStoreManager)
                         }
                         composable("register_screen") {
-                            registerScreen(navController, dataStoreManager)
+                            registerScreen(navController, authResponse, authStoreManager)
                         }
                         composable("home_screen") {
-                            homeScreen(navController)
+                            Middleware(
+                                isAuthenticated = isAutenticated(authResponse),
+                                undirect = { navController.navigate("login_screen") }
+                            ) {
+                                homeScreen(navController, authResponse, authStoreManager, modifier = Modifier.fillMaxSize(), cameraViewModel)
+                            }
                         }
                         composable("messages_screen") {
-                            messageScreen(navController, isDarkTheme, sampleMessages)
+                            Middleware(
+                                isAuthenticated = isAutenticated(authResponse),
+                                undirect = { navController.navigate("login_screen") }
+                            ) {
+                                messageScreen(navController, authResponse, isDarkTheme, messageViewModel)
+                            }
                         }
                         composable("settings_screen") {
-                            settingsScreen(navController, handler, notificationHelper, temp)
+                            Middleware(
+                                isAuthenticated = isAutenticated(authResponse),
+                                undirect = { navController.navigate("login_screen") }
+                            ) {
+                                settingsScreen(navController, authResponse, authStoreManager, settingsStore, isDarkTheme)
+                            }
                         }
                     }
                 }
             }
         }
     }
-
-    // Use any type of sensor listed here: Sensors Overview | Android Developers (5p)
-    override fun onSensorChanged(event: SensorEvent?) {
-        if (event == null) {
-            Log.d("TEMP", "Sensor event is null")
-            return
-        }
-
-        if (event?.sensor?.type == Sensor.TYPE_AMBIENT_TEMPERATURE) {
-            temp.value = event.values[0]
-            Log.d("TEMP", event.values[0].toString())
-        }
-    }
-
-    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
-        Log.d("Accurarcy change","sensor: $sensor; accuracy: $accuracy")
-    }
-
-    override fun onResume() {
-        super.onResume()
-        sensorManager.registerListener(this, temperatureSensor, SensorManager.SENSOR_DELAY_UI)
-    }
-
-    override fun onPause() {
-        super.onPause()
-        sensorManager.unregisterListener(this)
-    }
 }
 
-@OptIn(ExperimentalPermissionsApi::class)
 @Composable
-fun loginScreen(navController: NavController, notificationHelper: NotificationHelper) {
-    // but circular navigation should be prevented! (5p)
-    // https://foso.github.io/Jetpack-Compose-Playground/activity/backhandler/
-    // https://stackoverflow.com/questions/67401294/jetpack-compose-close-application-by-button
+fun loginScreen(
+    navController: NavController,
+    authResponseState: MutableState<AuthResponse?>,
+    authStoreManager: AuthStoreManager,
+) {
     BackPressHandler()
 
-    // https://medium.com/@rzmeneghelo/how-to-request-permissions-in-jetpack-compose-a-step-by-step-guide-7ce4b7782bd7
-    val postNotificationPermissionsState = rememberPermissionState(Manifest.permission.POST_NOTIFICATIONS)
+    val context = LocalContext.current
+    var email by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
 
-    val requestPermissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        if (isGranted) {
-            Log.d("Camera", "Granted")
-        } else {
-            Log.d("Camera", "Failed")
-        }
-    }
-
-    LaunchedEffect(postNotificationPermissionsState) {
-        if (postNotificationPermissionsState.status.isGranted) {
-            Log.d("LaunnchedEffect Perm notifications", "ELse")
-        } else {
-            requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-        }
-    }
-
-    Column {
-        Text("Hello login screen")
-        Button(
-            onClick = {
-                Log.d("HELLO NOTIFI", "SD")
-                notificationHelper.showBasicNotification()
-                navController.navigate("home_screen") {
-                    popUpTo(navController.graph.startDestinationId) { inclusive = true }
-                    launchSingleTop = true
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally)
+    {
+        Text("Login screen")
+        TextField(
+            value = email,
+            onValueChange = { email = it },
+            label = { Text("Enter your email") },
+            modifier = Modifier.fillMaxWidth(0.6f)
+        )
+        TextField(
+            value = password,
+            onValueChange = { password = it },
+            label = { Text("Enter your password") },
+            modifier = Modifier.fillMaxWidth(0.6f)
+        )
+        Button(onClick = {
+            CoroutineScope(Dispatchers.Main).launch {
+                val authResponse = authWithPassword(email, password)
+                if (isAutenticated(authResponse) && authResponse != null) {
+                    Toast.makeText(context, "Login successful", Toast.LENGTH_LONG).show()
+                    authResponseState.value = authResponse
+                    authStoreManager.saveToDataStore(authResponse)
+                    navController.navigate("home_screen")
+                } else{
+                    Toast.makeText(context, "Login failed", Toast.LENGTH_LONG).show()
                 }
             }
-        ) {
-            Text("Login")
+        }) {
+            Text("Submit")
         }
         Button(
             onClick = {
@@ -251,13 +258,15 @@ fun loginScreen(navController: NavController, notificationHelper: NotificationHe
 }
 
 @Composable
-fun registerScreen(navController: NavController, dataStoreManager: DataStoreManager) {
+fun registerScreen(
+    navController: NavController,
+    authResponseState: MutableState<AuthResponse?>,
+    authStoreManager: AuthStoreManager,
+) {
+    val context = LocalContext.current
+    var email by remember { mutableStateOf("") }
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
-    val selectedImageUri = remember { mutableStateOf<Uri?>(null) }
-    val selectedImageVal = remember { mutableStateOf<String?>(null) }
-    val context = LocalContext.current
-    val dataStoreManager = DataStoreManager(context)
 
     BackPressHandler()
 
@@ -270,6 +279,12 @@ fun registerScreen(navController: NavController, dataStoreManager: DataStoreMana
     ) {
         Text("Hello Register Screen", modifier = Modifier.padding(bottom = 16.dp, top= 16.dp))
         TextField(
+            value = email,
+            onValueChange = { email = it },
+            label = { Text("Enter your email") },
+            modifier = Modifier.fillMaxWidth(0.6f)
+        )
+        TextField(
             value = username,
             onValueChange = { username = it },
             label = { Text("Enter your username") },
@@ -281,30 +296,22 @@ fun registerScreen(navController: NavController, dataStoreManager: DataStoreMana
             label = { Text("Enter your password") },
             modifier = Modifier.fillMaxWidth(0.6f)
         )
-        // Input and display at least some text and a picture in one view (5p)
-        // https://stackoverflow.com/questions/78110240/how-to-pass-a-value-from-a-composable-function-to-another-composable-function-an
-        imagePicker(selectedImageUri = selectedImageUri.value,
-            onImageSelected = { uri ->
-                Log.d("ImagePickerExample", "Selected Image URI: $uri , $selectedImageUri")
-                val imagePath = saveImageToLocalStorage(uri, context)
-                selectedImageUri.value = Uri.parse(imagePath)
-                selectedImageVal.value = imagePath
-                Log.d("ImagePickerExample", "Saved Image Path: $imagePath")
-            }
-        )
-        // Display given text and picture in another view and retain these changes when restarting application (5p)
+
+        // https://developer.android.com/guide/topics/ui/notifiers/toasts
         Button(onClick = {
-            val user = userStore(
-                username = username,
-                password = password,
-                profile_picture = selectedImageVal.value ?: ""
-            )
+            CoroutineScope(Dispatchers.Main).launch {
+                createUser(NewUser(email, password, password, username))
+                val authResponse = authWithPassword(email, password)
+                if (isAutenticated(authResponse) && authResponse != null) {
+                    Toast.makeText(context, "New user created", Toast.LENGTH_LONG).show()
+                    authResponseState.value = authResponse
+                    authStoreManager.saveToDataStore(authResponse)
+                    navController.navigate("home_screen")
+                } else{
+                    Toast.makeText(context, "user creation failed", Toast.LENGTH_LONG).show()
+                }
 
-            CoroutineScope(Dispatchers.IO).launch {
-                dataStoreManager.saveToDataStore(user)
             }
-
-            navController.navigate("home_screen")
         }) {
             Text("Submit")
         }
@@ -312,173 +319,321 @@ fun registerScreen(navController: NavController, dataStoreManager: DataStoreMana
 }
 
 
+@OptIn(ExperimentalPermissionsApi::class)
 @Composable
-fun homeScreen(navController: NavController) {
-    Column {
-        Text("Hello home screen")
+fun homeScreen(
+    navController: NavController,
+    authResponse: MutableState<AuthResponse?>,
+    authStoreManager: AuthStoreManager,
+    modifier: Modifier,
+    viewModel: CameraPreviewViewModel
+) {
+    // https://aboyi.medium.com/how-to-make-your-own-android-camera-app-without-knowing-how-aca3364358b
+    val cameraPermissionsState = rememberPermissionState(Manifest.permission.CAMERA)
+
+    var text: MutableState<String> = remember { mutableStateOf("") }
+
+    val requestPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            Log.d("Camera permissions", "Granted")
+        }
+    }
+
+    LaunchedEffect(cameraPermissionsState) {
+        if (cameraPermissionsState.status.isGranted) {
+            Log.d("Camera permissions", "Granted")
+        } else {
+            requestPermissionLauncher.launch(Manifest.permission.CAMERA)
+        }
+    }
+
+    Column(
+        modifier = Modifier.fillMaxSize()
+    ) {
+        CameraPreview(cameraPermissionsState, modifier.fillMaxWidth().weight(1f), viewModel, authResponse, text)
+        TextField(
+            value = text.value,
+            onValueChange = { text.value = it },
+            label = { Text("Enter message") },
+            modifier = Modifier.fillMaxWidth().padding(16.dp)
+        )
+    }
+
+}
+
+@OptIn(ExperimentalPermissionsApi::class)
+@Composable
+fun CameraPreview(
+    cameraPermissionsState: PermissionState,
+    modifier: Modifier,
+    viewModel: CameraPreviewViewModel,
+    authResponse: MutableState<AuthResponse?>,
+    text: MutableState<String>
+) {
+    if (cameraPermissionsState.status.isGranted) {
+        CameraPreviewContent(viewModel, modifier, authResponse, text)
+    } else {
+        Column(
+            modifier = modifier
+                .fillMaxSize()
+                .wrapContentSize()
+                .widthIn(max = 480.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text("The applicationn needs camera permissions", textAlign = TextAlign.Center)
+            Spacer(Modifier.height(16.dp))
+            Button(onClick = { cameraPermissionsState.launchPermissionRequest() }) {
+                Text("Give permissions to camera")
+            }
+        }
     }
 }
+
+// https://medium.com/androiddevelopers/tap-to-focus-mastering-camerax-transformations-in-jetpack-compose-440853280a6e
+@Composable
+fun CameraPreviewContent(
+    viewModel: CameraPreviewViewModel,
+    modifier: Modifier = Modifier,
+    authResponse: MutableState<AuthResponse?>,
+    text: MutableState<String>,
+    lifecycleOwner: LifecycleOwner = LocalLifecycleOwner.current
+) {
+    val context = LocalContext.current
+    val surfaceRequest by viewModel.surfaceRequest.collectAsStateWithLifecycle()
+    val displayRotation = context.display?.rotation
+
+    LaunchedEffect(lifecycleOwner) {
+        viewModel.bindToCamera(context.applicationContext, lifecycleOwner)
+    }
+
+    surfaceRequest?.let { request ->
+        CameraXViewfinder(
+            surfaceRequest = request,
+            modifier = modifier.pointerInput(Unit) {
+                detectTapGestures {
+                    capturePhoto(context, viewModel.imageCapture, displayRotation, authResponse, text)
+                }
+            }
+        )
+    }
+}
+
+// https://developer.android.com/media/camera/camerax/take-photo#kotlin
+// https://github.com/Coding-Meet/Camera-Using-CameraX
+// https://stackoverflow.com/questions/61172891/camerax-image-rotation-with-fixed-sreenorientation
+fun capturePhoto(
+    context: Context,
+    imageCapture: ImageCapture,
+    displayRotation: Int?,
+    authResponse: MutableState<AuthResponse?>,
+    text: MutableState<String>
+) {
+    val photoFile = File(
+        context.externalMediaDirs.firstOrNull(),
+        "latest_photo.jpg"
+    )
+
+    val outputOptions = ImageCapture.OutputFileOptions.Builder(photoFile).build()
+
+    val rotationDegrees = (displayRotation ?: Surface.ROTATION_0) + Surface.ROTATION_90
+
+    imageCapture.takePicture(
+        outputOptions,
+        ContextCompat.getMainExecutor(context),
+        object : ImageCapture.OnImageSavedCallback {
+            override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
+                val exif = ExifInterface(photoFile)
+                val rotation = when (rotationDegrees) {
+                    Surface.ROTATION_90 -> ExifInterface.ORIENTATION_ROTATE_90
+                    Surface.ROTATION_180 -> ExifInterface.ORIENTATION_ROTATE_180
+                    Surface.ROTATION_270 -> ExifInterface.ORIENTATION_ROTATE_270
+                    else -> ExifInterface.ORIENTATION_NORMAL
+                }
+                exif.setAttribute(ExifInterface.TAG_ORIENTATION, rotation.toString())
+                exif.saveAttributes()
+
+                Toast.makeText(context, "Message sent", Toast.LENGTH_LONG).show()
+
+                val atomicAuthResponse = authResponse.value
+                if (atomicAuthResponse  != null) {
+                    uploadMessage(atomicAuthResponse, text.value, photoFile)
+                }
+            }
+
+            override fun onError(exception: ImageCaptureException) {
+                Toast.makeText(context, "Photo capturing failed", Toast.LENGTH_LONG).show()
+            }
+        }
+    )
+}
+
 
 @Composable
 fun settingsScreen(
     navController: NavController,
-    handler: Handler,
-    notificationHelper: NotificationHelper,
-    temp: MutableState<Float>
+    authResponse: MutableState<AuthResponse?>,
+    authStoreManager: AuthStoreManager,
+    settingsStore: SettingsStore,
+    isDarkTheme: MutableState<Boolean>,
 ) {
-    val context = LocalContext.current
-    val coroutineScope = rememberCoroutineScope()
-    val dataStoreManager = DataStoreManager(context)
     val username = remember { mutableStateOf("") }
-    val password = remember { mutableStateOf("") }
-    val profilePicture = remember { mutableStateOf("") }
-    val stopFlag = remember { mutableStateOf(false) }
 
-    // https://medium.com/@spparks_/android-concurrency-part-i-runnable-handler-looper-and-threads-d860d9ded9bb
-    // Notification can be interacted with (something happens if you tap it) (2p)
-    // While the app is not on foreground (1p)
-    var task = object : Runnable {
-        override fun run() {
-            if (stopFlag.value) {
-                Log.d("Reminder", "Stopped TASK $stopFlag")
-                return
-            }
-            // Trigger a notification (2p)
-            notificationHelper.showStopNotification()
-            handler.postDelayed(this, 10000)
-        }
-    }
-
-    // https://stackoverflow.com/questions/70480709/what-is-the-useeffect-correspondent-in-android-compose-component
     LaunchedEffect(Unit) {
-        dataStoreManager.getFromDataStore().collect { userStore ->
-            username.value = userStore.username
-            password.value = userStore.password
-            profilePicture.value = userStore.profile_picture
+        authStoreManager.getFromDataStore().collect { userStore ->
+            username.value = userStore.record.email
         }
     }
+
     Column {
-        Text("Hello settings")
-        // but circular navigation should be prevented! (5p)
-        // https://stackoverflow.com/questions/71789903/does-navoptionsbuilder-launchsingletop-work-with-nested-navigation-graphs-in-jet
-        Button(onClick = {
-            coroutineScope.launch {
+        Text(
+            text = "Settings",
+            style = MaterialTheme.typography.headlineLarge.copy(
+                color = MaterialTheme.colorScheme.primary, fontWeight = MaterialTheme.typography.headlineLarge.fontWeight),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+        )
+
+        Text("Email: ${authResponse.value?.record?.email}",
+            style = MaterialTheme.typography.headlineSmall.copy(
+                color = MaterialTheme.colorScheme.primary),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+
+        Row(modifier = Modifier.padding(vertical = 6.dp, horizontal = 16.dp)) {
+            Button(onClick = {
+                CoroutineScope(Dispatchers.Main).launch {
+                    authResponse.value = null
+                    authStoreManager.clearDataStore()
+                }
                 navController.navigate("login_screen") {
                     popUpTo(navController.graph.startDestinationId) { inclusive = true }
-                    launchSingleTop = true
-                }
-                dataStoreManager.clearDataStore()
-                dataStoreManager.getFromDataStore().collect { userStore ->
-                    username.value = userStore.username
-                    password.value = userStore.password
-                    profilePicture.value = userStore.profile_picture
-                }
-                Log.d("username AFTER", username.value)
+                    launchSingleTop = true }
+                isDarkTheme.value = true
             }
-        }) {
-            Text("Sign out")
-        }
+            ) {
+                Text("Sign out")
+            }
 
-        //https://stackoverflow.com/questions/4134203/how-to-use-registerreceiver-method
-        Button(onClick = {
-            val stopReceiver = StopNotificationReceiver(stopFlag)
-            val intentFilter = IntentFilter("com.example.ACTION_STOP")
-            context.registerReceiver(stopReceiver, intentFilter, Context.RECEIVER_EXPORTED)
-            stopFlag.value = false
-            handler.post(task)
-        }) {
-            Text("Start reminder")
-        }
-
-        Button(onClick = {
-            handler.removeCallbacks(task)
-        }) {
-            Text("Stop reminder")
-        }
-
-        Text("username: ${username.value}")
-        Text("password: ${password.value}")
-        Text("Profile_picture: ${profilePicture.value}")
-        if (profilePicture.value.isNotEmpty()) {
-            val file = File(profilePicture.value)
-            if (file.exists()) {
-                Image(
-                    painter = rememberAsyncImagePainter(file),
-                    contentDescription = "Profile Picture",
-                    modifier = Modifier.fillMaxWidth()
-                )
-            } else {
-                Text("Profile picture not found.")
+            Button(
+                onClick = {
+                    isDarkTheme.value = !isDarkTheme.value
+                    CoroutineScope(Dispatchers.Main).launch {
+                        settingsStore.saveToDataStore(isDarkTheme.value)
+                    }
+                },
+                modifier = Modifier.padding(horizontal = 6.dp)
+            ) {
+                Text("Switch Theme")
             }
         }
-        Text("Temperature: ${temp.value}")
     }
 }
 
 @Composable
-fun messageScreen(navController: NavController, isDarkTheme: MutableState<Boolean>, sampleMessages: List<Message>) {
+fun messageScreen(navController: NavController, authResponse: MutableState<AuthResponse?>, isDarkTheme: MutableState<Boolean>, messageViewModel: MessageViewModel) {
+    val context = LocalContext.current
+
+    LaunchedEffect(authResponse.value) {
+        if (authResponse.value == null) {
+            Toast.makeText(context, "Authentication state not OK", Toast.LENGTH_LONG).show()
+        } else if (messageViewModel.messagesState.value == null) {
+            CoroutineScope(Dispatchers.IO).launch {
+                val messages = getMessages(authResponse.value!!)
+                messageViewModel.messagesState.value = messages
+            }
+        }
+    }
+
     Column {
-        // At least 2 different styles of text (0.5p)
         Row {
             Text(
                 text = "Messages",
                 style = MaterialTheme.typography.headlineLarge.copy(
                     color = MaterialTheme.colorScheme.primary,
-                    fontFamily = androidx.compose.ui.text.font.FontFamily.Serif
                 ),
-                modifier = Modifier
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                modifier = Modifier.padding(horizontal = 32.dp, vertical = 8.dp)
             )
-            //At least one clickable element that creates a visible change (2p)
-            IconButton(
-                onClick = { isDarkTheme.value = !isDarkTheme.value },
-                modifier = Modifier.padding(top = 6.dp)
+            IconButton(onClick = {
+                CoroutineScope(Dispatchers.IO).launch {
+                    val messages = getMessages(authResponse.value!!)
+                    messageViewModel.messagesState.value = messages
+                }
+            }, modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Default.Settings,
-                    contentDescription = "Toggle theme",
-                    tint = MaterialTheme.colorScheme.primary
-                )
+                Icon(imageVector = Icons.Filled.Refresh, contentDescription = "fetch messages")
+
             }
         }
-        //Scrolling and enough visual elements to need it (1p)
-        MessageList(messages = sampleMessages)
+
+        val messages = messageViewModel.messagesState.value
+        if (messages != null) {
+            MessageList(authResponse, messages = messages.items)
+        } else {
+            Text("No messages available")
+        }
     }
 }
 
-data class Message(val author: String, val body: String)
 
 @Composable
-fun MessageCard(msg: Message, modifier: Modifier = Modifier) {
-    Row(modifier = Modifier.padding(all = 8.dp)) {
-        // At least one custom image (1p)
-        Image(
-            painter = painterResource(R.drawable.dsc03221),
-            contentDescription = "Contact profile picture",
-            modifier = Modifier
-                .padding(top = 16.dp)
-                .size(40.dp)
-                .clip(CircleShape)
-                .border(1.5.dp, MaterialTheme.colorScheme.primary, CircleShape)
-        )
+fun MessageCard(authResponse: MutableState<AuthResponse?>, msg: Message, modifier: Modifier = Modifier) {
+    val imagePainter = rememberAsyncImagePainter(getImageURL(authResponse.value, msg))
+    Column (
+        Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.background)
+            .padding(vertical = 20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Row(modifier = Modifier.padding(2.dp)) {
+            // Null check if expand does not arrive from server. Some security settings might drop it.
+            (msg.expand?.user?.name ?: null)?.let {
+                Text(
+                    text = it,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
 
-        Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(4.dp))
 
-        Column(modifier = Modifier.padding(all = 8.dp)) {
-            // At least 2 different styles of text (0.5p)
-            Text(text = msg.author, color = MaterialTheme.colorScheme.secondary)
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(text = msg.body)
+            Text(
+                text = msg.updated.substring(0, msg.updated.lastIndexOf('.')),
+                color = MaterialTheme.colorScheme.secondary
+            )
+        }
+
+        Column(
+            modifier = Modifier.padding(8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Image(
+                painter = imagePainter,
+                contentDescription = "Picture",
+                modifier = Modifier
+                    .width(300.dp)
+                    .height(200.dp)
+                    .clip(RectangleShape)
+                    .padding(0.dp)
+            )
+            Text(
+                text = msg.text,
+                color = MaterialTheme.colorScheme.secondary,
+                modifier = Modifier.padding(0.dp)
+            )
         }
     }
 }
 
 @Composable
-fun MessageList(messages: List<Message>, modifier: Modifier = Modifier) {
-    // https://stackoverflow.com/questions/78523222/two-lazycolumn-on-one-screen-with-common-scroll
-    LazyColumn(modifier = modifier.padding(all = 2.dp)) {
-        items(messages) { message ->
-            MessageCard(msg = message, modifier = Modifier.padding(bottom = 8.dp))
+fun MessageList(authResponse: MutableState<AuthResponse?>, messages: List<Message>, modifier: Modifier = Modifier) {
+    if (authResponse.value != null) {
+        LazyColumn(modifier = modifier.padding(vertical = 24.dp, horizontal = 12.dp)) {
+            items(messages) { message ->
+                MessageCard(
+                    authResponse,
+                    msg = message,
+                    modifier = Modifier.padding(vertical = 8.dp)
+                )
+            }
         }
     }
 }

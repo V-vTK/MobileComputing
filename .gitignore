@@ -17,3 +17,6 @@
 **/.idea/
 openSnap/app/build
 openSnap/.gradle
+*.exe
+/pb_data
+/pb_migrations
