@@ -109,7 +109,6 @@ suspend fun getMessages(authResponse: AuthResponse): Messages? {
         val response = future.get() ?: throw IllegalStateException("Most likely timeout")
         if (response.isSuccessful) {
             val responseBody = response.body?.string() ?: throw IOException("Empty response body")
-            Log.d("SPECIAL POCKETS", "${response.code}:${response.message} - $responseBody")
             return Gson().fromJson(responseBody, Messages::class.java)
         } else {
             throw IOException("${response.code}:${response.message} - ${response.body?.string()}")
@@ -138,7 +137,6 @@ fun uploadMessage(authResponse: AuthResponse, text: String, file: File): Boolean
         .addFormDataPart("user", authResponse.record.id)
         .addFormDataPart("photo", file.name, file.asRequestBody("image/jpeg".toMediaTypeOrNull()))
         .build()
-    Log.d("POCKETBSAE DATA", text + authResponse.record.id.toString() + file.name.toString())
     val request = Request.Builder()
         .url(url)
         .addHeader("Authorization", "Bearer ${authResponse.token}")

@@ -119,7 +119,7 @@ class MainActivity : ComponentActivity() {
                         Log.d("Authstore", "Token valid")
                         navController.navigate("home_screen")
                     } else {
-                        Log.d("Authstore", "Token does not exist")
+                        Log.d("Authstore", "Token invalid")
                         navController.navigate("login_screen")
                     }
                 }
@@ -344,14 +344,12 @@ fun homeScreen(
     ) { isGranted ->
         if (isGranted) {
             Log.d("Camera permissions", "Granted")
-        } else {
-            Log.d("Camera permissions", "Failed")
         }
     }
 
     LaunchedEffect(cameraPermissionsState) {
         if (cameraPermissionsState.status.isGranted) {
-            Log.d("Camera permissions", "Newly granted")
+            Log.d("Camera permissions", "Granted")
         } else {
             requestPermissionLauncher.launch(Manifest.permission.CAMERA)
         }
@@ -586,7 +584,6 @@ fun messageScreen(navController: NavController, authResponse: MutableState<AuthR
 
 @Composable
 fun MessageCard(authResponse: MutableState<AuthResponse?>, msg: Message, modifier: Modifier = Modifier) {
-    Log.d("DEBUG123", msg.toString())
     val imagePainter = rememberAsyncImagePainter(getImageURL(authResponse.value, msg))
     Column (
         Modifier
