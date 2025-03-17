@@ -1,9 +1,11 @@
 # Mobile computing
+Deviced to try something new rather than proceeding with React Native. Jetpack compose has a lot of similarities with React but in my opinion it's missing some key features like Tailwind and "good" component libraries. Still a lot of knowledge transfers directlty over from React, which was a pleasant surprise. Final course grade was 5/5 including full points from all homeworks and final project.
 
-Homeworks are under HW branches 
-Final project is under master branch
+Homeworks are under HW branches and final project is under master branch.
 
 ### Final project (15 +10) ###
+"If your project is very good, you may get extra points towards the course grade to make up for lost points from previous homework assignments (total homework points will not exceed 50). In general, implementing more features can earn you more points, but in order to earn extra points, the work must be high quality as it will be evaluated more strictly beyond 15p."
+
 Authentication and caching (10p)
 - User is able to register and log in trough the application
 - User authentication (JWT) token is saved onto the device and automatic login is completed if cached token is found.
